@@ -20,8 +20,11 @@ from app.schemas.match import (
     MatchOut,
     PlayerRef,
     PotsIn,
+    RoundHistory,
+    RoundPostponeIn,
     SnapshotDetail,
     SnapshotOut,
+    StageHistory,
     StageStandings,
     StandingRow,
 )
@@ -200,6 +203,7 @@ async def list_matches(
     round: int | None = None,
     player_id: int | None = None,
     status_: str | None = None,
+    postponed: bool | None = None,
 ):
     await _get_or_404(session, tournament_id)
     stmt = select(Match).where(Match.tournament_id == tournament_id).order_by(Match.stage_id, Match.round, Match.slot, Match.id)
@@ -211,6 +215,8 @@ async def list_matches(
         stmt = stmt.where((Match.player1_id == player_id) | (Match.player2_id == player_id))
     if status_:
         stmt = stmt.where(Match.status == status_)
+    if postponed is not None:
+        stmt = stmt.where(Match.postponed.is_(postponed))
     return await matches_out(session, (await session.scalars(stmt)).all())
 
 
@@ -238,21 +244,154 @@ async def standings_view(tournament_id: int, session: SessionDep):
 
 
 @router.get("/{tournament_id}/history", response_model=list[SnapshotOut])
-async def history(tournament_id: int, session: SessionDep, stage_id: int | None = None, limit: int = 100):
+async def history(
+    tournament_id: int, session: SessionDep, stage_id: int | None = None, kind: str | None = None, limit: int = 100
+):
+    """Todos os registros do torneio (mais recentes primeiro). `kind`: change | round | final."""
     await _get_or_404(session, tournament_id)
     stmt = select(StandingsSnapshot).where(StandingsSnapshot.tournament_id == tournament_id)
     if stage_id:
         stmt = stmt.where(StandingsSnapshot.stage_id == stage_id)
+    if kind:
+        stmt = stmt.where(StandingsSnapshot.kind == kind)
     stmt = stmt.order_by(StandingsSnapshot.id.desc()).limit(min(limit, 500))
     return (await session.scalars(stmt)).all()
 
 
+async def _family_ids(session, t: Tournament) -> list[int]:
+    """O torneio e os seus subtorneios: o histórico do principal mostra também a repescagem."""
+    kids = (await session.scalars(select(Tournament.id).where(Tournament.parent_id == t.id).order_by(Tournament.id))).all()
+    return [t.id, *kids]
+
+
+@router.get("/{tournament_id}/history/stages", response_model=list[StageHistory])
+async def history_stages(tournament_id: int, session: SessionDep):
+    """Estado final de cada fase já encerrada (fase de grupos, pontos corridos, mata-mata, repescagem...).
+
+    Inclui as fases dos subtorneios. Se uma correção posterior alterou o resultado, vale a versão mais recente.
+    """
+    t = await _get_or_404(session, tournament_id)
+    ids = await _family_ids(session, t)
+    snaps = (
+        await session.scalars(
+            select(StandingsSnapshot)
+            .where(StandingsSnapshot.tournament_id.in_(ids), StandingsSnapshot.kind == "final")
+            .order_by(StandingsSnapshot.id)
+        )
+    ).all()
+    latest: dict[int, StandingsSnapshot] = {}
+    versions: dict[int, int] = {}
+    for s in snaps:
+        latest[s.stage_id] = s
+        versions[s.stage_id] = versions.get(s.stage_id, 0) + 1
+    rows = await session.execute(select(Tournament.id, Tournament.name).where(Tournament.id.in_(ids)))
+    names = {tid: name for tid, name in rows.all()}
+    stages = (await session.scalars(select(Stage).where(Stage.tournament_id.in_(ids)))).all()
+    out = []
+    for st in sorted(stages, key=lambda s: (ids.index(s.tournament_id), s.position)):
+        snap = latest.get(st.id)
+        if snap is None or st.status != "finished":
+            continue
+        out.append(
+            StageHistory(
+                snapshot_id=snap.id, tournament_id=st.tournament_id, tournament_name=names[st.tournament_id],
+                stage_id=st.id, stage_name=st.name, stage_type=st.type, created_at=snap.created_at,
+                versions=versions[st.id], data=snap.data,
+            )
+        )
+    return out
+
+
+@router.get("/{tournament_id}/history/rounds", response_model=list[RoundHistory])
+async def history_rounds(tournament_id: int, session: SessionDep, stage_id: int | None = None):
+    """Tabela ao fim de cada rodada de pontos corridos/grupos, da primeira em diante (uma por rodada)."""
+    t = await _get_or_404(session, tournament_id)
+    ids = await _family_ids(session, t)
+    stmt = select(StandingsSnapshot).where(StandingsSnapshot.tournament_id.in_(ids), StandingsSnapshot.kind == "round")
+    if stage_id:
+        stmt = stmt.where(StandingsSnapshot.stage_id == stage_id)
+    latest: dict[tuple[int, int], StandingsSnapshot] = {}
+    for s in (await session.scalars(stmt.order_by(StandingsSnapshot.id))).all():
+        latest[(s.stage_id, s.round)] = s  # se a rodada foi refeita depois de reaberta, vale a mais recente
+    stage_by_id = {st.id: st for st in (await session.scalars(select(Stage).where(Stage.tournament_id.in_(ids)))).all()}
+
+    def order(item):
+        (sid, rnd), _ = item
+        st = stage_by_id[sid]
+        return (ids.index(st.tournament_id), st.position, rnd)
+
+    out = []
+    for (sid, rnd), s in sorted(latest.items(), key=order):
+        d = s.data or {}
+        out.append(
+            RoundHistory(
+                snapshot_id=s.id, tournament_id=s.tournament_id, stage_id=sid, stage_name=stage_by_id[sid].name, round=rnd,
+                created_at=s.created_at, reopened=bool(d.get("reopened")), postponed=d.get("postponed", []),
+                played_postponed=d.get("played_postponed", []), data=d,
+            )
+        )
+    return out
+
+
 @router.get("/{tournament_id}/history/{snapshot_id}", response_model=SnapshotDetail)
 async def history_detail(tournament_id: int, snapshot_id: int, session: SessionDep):
+    t = await _get_or_404(session, tournament_id)
     snap = await session.get(StandingsSnapshot, snapshot_id)
-    if not snap or snap.tournament_id != tournament_id:
+    if not snap or snap.tournament_id not in await _family_ids(session, t):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Registro de histórico não encontrado.")
     return snap
+
+
+# ---------- adiamento de rodadas (pontos corridos / grupos) ----------
+async def _round_action(session, tournament_id: int, data: RoundPostponeIn, user, postpone: bool) -> list:
+    t = await _get_or_404(session, tournament_id)
+    _require_manage(user, t)
+    stage = await session.get(Stage, data.stage_id)
+    if not stage or stage.tournament_id != t.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fase não encontrada neste torneio.")
+    try:
+        results.check_postponable(t, stage)
+    except results.ResultError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    ms = [
+        m for m in await tables.stage_matches(session, stage)
+        if m.round == data.round and (data.group_label is None or m.group_label == data.group_label)
+    ]
+    if not ms:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Rodada não encontrada nesta fase.")
+    changed = [m for m in ms if (results.postpone(m, user.id, data.reason) if postpone else results.resume(m))]
+    if not changed:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Nenhum confronto pendente nesta rodada para adiar." if postpone else "Nenhum confronto adiado nesta rodada.",
+        )
+    where = f" (grupo {data.group_label})" if data.group_label else ""
+    session.add(
+        AuditLog(
+            actor_id=user.id, action="round.postpone" if postpone else "round.resume", entity="tournament", entity_id=t.id,
+            data={"stage_id": stage.id, "round": data.round, "group_label": data.group_label, "reason": data.reason,
+                  "matches": [m.id for m in changed]},
+        )
+    )
+    verb = "adiada" if postpone else "retomada"
+    await results.recalc(session, t, stage, f"Rodada {data.round}{where} {verb}")
+    await session.commit()
+    return await matches_out(session, changed)
+
+
+@router.post("/{tournament_id}/rounds/postpone", response_model=list[MatchOut])
+async def postpone_round(tournament_id: int, data: RoundPostponeIn, user: StaffUser, session: SessionDep):
+    """Adia os confrontos ainda pendentes de uma rodada (só admin ou organizador do torneio).
+
+    Os jogos adiados continuam podendo ser reportados, mas a fase não encerra enquanto houver algum pendente.
+    """
+    return await _round_action(session, tournament_id, data, user, postpone=True)
+
+
+@router.post("/{tournament_id}/rounds/resume", response_model=list[MatchOut])
+async def resume_round(tournament_id: int, data: RoundPostponeIn, user: StaffUser, session: SessionDep):
+    """Remove o adiamento dos confrontos de uma rodada que ainda não foram disputados."""
+    return await _round_action(session, tournament_id, data, user, postpone=False)
 
 
 @router.get("/{tournament_id}/bracket", response_model=list[BracketStage])

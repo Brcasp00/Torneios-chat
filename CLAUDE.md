@@ -60,7 +60,8 @@ Admin não pode rebaixar nem desativar a si mesmo. Admin reseta a senha (não h�
   - **Limite conhecido:** o template `groups_knockout` exige nº par de grupos (cruzamento fixo); subtorneio cancelado nunca libera o destino (apague-o).
 - **Sorteio da 1ª fase (`/draw` prévia, `/start` confirma):** (a) **aleatório** por seed; (b) **por potes** (`PUT /tournaments/{id}/pots`, `TournamentPlayer.pot`, 1 = mais forte; vale `use_pots`; todos precisam de pote se algum tiver): grupos recebem um jogador de cada pote por grupo (potes do tamanho do nº de grupos) e no mata-mata os potes viram seeds (pote 1 = cabeças de chave, chave padrão 1×N) — o `seed` do jogador passa a ser o ranking dos potes; (c) **manual**: `arrangement` com `slots` (mata-mata, ordem da chave), `groups` (`{"A":[ids]}`) ou `pairs` (round/playoff); não se aplica a pontos corridos. O `/draw` devolve o `arrangement` editável: o front ajusta e reenvia em `/start`. O sorteio fica registrado em `Tournament.config["draw"]` (seed, modo, potes, arranjo, quem/quando) e é público em `GET /tournaments/{id}/draw`.
 - **Início do torneio** só via `POST /tournaments/{id}/start` e **com exatamente `max_players` inscritos**. Jogador que desiste antes do início é removido da lista.
-- **Histórico:** cada mudança relevante salva um snapshot da tabela (`standings_snapshots`). Admin pode corrigir/invalidar resultados a qualquer momento (irregularidades); tudo é recalculado e registrado em `audit_log`.
+- **Histórico:** cada mudança relevante salva um snapshot da tabela (`standings_snapshots`, `kind="change"`). Admin pode corrigir/invalidar resultados a qualquer momento (irregularidades); tudo é recalculado e registrado em `audit_log`. Além disso (`services/history.py`): **`kind="round"`** = tabela congelada quando uma rodada de pontos corridos/grupos fecha (uma por rodada, todas consultáveis; a tabela traz `played` por jogador para ver quem tem jogo a menos); **`kind="final"`** = estado final de cada fase (grupos, liga, mata-mata com `ranking`, rodada/playoff, e as fases dos subtorneios), regravado como nova versão se uma correção posterior o alterar (`versions`). Consultas públicas: `GET /tournaments/{id}/history/rounds[?stage_id=]`, `/history/stages` (inclui subtorneios), `/history?kind=`.
+- **Adiamento (só pontos corridos/grupos, só admin/organizador do torneio):** adia um jogo (`POST /matches/{id}/postpone`) ou os jogos pendentes de uma rodada (`POST /tournaments/{id}/rounds/postpone` com `stage_id`, `round`, `group_label` opcional, `reason`); `resume` desfaz enquanto o jogo não foi disputado. O jogo adiado **continua podendo ser reportado**; a fase e o torneio **não encerram** enquanto houver jogo pendente (e `PATCH status=finished` retorna 409). Uma rodada "fecha" para o histórico quando seus jogos estão validados/anulados ou adiados; o snapshot dela registra `postponed` (pendentes) e **nunca é alterado depois**. O jogo adiado, quando disputado, entra na tabela do próximo snapshot que fechar (`played_postponed`, com `original_round`) ou no estado final. Se uma rodada fechada voltar a ter jogo em aberto (invalidação/retomada) o snapshot ganha `reopened=true` e, ao fechar de novo, é criado um novo.
 - **Regras de batalha:** campos estruturados (`battle_rules`: formato, jogo, tier, team_size, bring, level_cap, timer, clauses, showdown_required) + texto livre (`rules_text`).
 
 ## Arquitetura (back-end)
@@ -76,8 +77,8 @@ backend/
     api/     auth.py users.py tournaments.py play.py matches.py
     services/ templates.py schedule.py bracket.py stages.py tables.py engine.py standings.py results.py views.py
     scripts/ create_admin.py
-  alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py
-  tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py   # SQLite em memória
+  alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py
+  tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py test_history.py   # SQLite em memória
 ```
 
 - Testes usam **SQLite** (`JsonType` → JSON; `BigIntPK` → INTEGER). Nunca apontam para o banco real.
@@ -87,13 +88,13 @@ backend/
 ### Endpoints atuais (docs interativa em `/docs`)
 - **auth:** `POST /auth/register|login|change-password`, `GET /auth/me`
 - **users:** `GET /users` (público: id+nome), `GET /users/admin`, `POST /users/{id}/reset-password`, `PATCH /users/{id}/role|active`
-- **tournaments:** `GET /tournaments`, `GET /tournaments/{id}` (detalhe completo: fases, regras, jogadores, subtorneios, `can_manage`), `POST /tournaments`, `POST /tournaments/{id}/subtournaments`, `PATCH /tournaments/{id}`, `PATCH /tournaments/{id}/status`, `DELETE /tournaments/{id}`, `GET|POST /tournaments/{id}/players`, `DELETE /tournaments/{id}/players/{user_id}`, `POST /tournaments/{id}/withdraw`, `PUT /tournaments/{id}/rules/{rule_id}/subtournament`
-- **play:** `PUT /tournaments/{id}/pots`, `POST /tournaments/{id}/draw` (prévia: `seed`, `use_pots`, `arrangement`), `POST /tournaments/{id}/start` (mesmos campos), `GET /tournaments/{id}/draw` (registro do sorteio), `GET /tournaments/{id}/matches|standings|bracket|history`, `GET /tournaments/{id}/history/{snapshot_id}`
-- **matches:** `GET /matches/{id}`, `POST /matches/{id}/report|validate|reject|result|walkover|invalidate`
+- **tournaments:** `GET /tournaments`, `GET /tournaments/{id}` (detalhe completo: fases, regras, jogadores, subtorneios, `can_manage`), `POST /tournaments`, `POST /tournaments/{id}/subtournaments`, `PATCH /tournaments/{id}`, `PATCH /tournaments/{id}/status`, `DELETE /tournaments/{id}`, `GET|POST /tournaments/{id}/players`, `DELETE /tournaments/{id}/players/{user_id}`, `POST /tournaments/{id}/withdraw`, `PUT /tournaments/{id}/rules/{rule_id}/subtournament`, `POST /tournaments/{id}/rounds/postpone|resume`
+- **play:** `PUT /tournaments/{id}/pots`, `POST /tournaments/{id}/draw` (prévia: `seed`, `use_pots`, `arrangement`), `POST /tournaments/{id}/start` (mesmos campos), `GET /tournaments/{id}/draw` (registro do sorteio), `GET /tournaments/{id}/matches|standings|bracket|history`, `GET /tournaments/{id}/history/rounds|stages`, `GET /tournaments/{id}/history/{snapshot_id}`
+- **matches:** `GET /matches/{id}`, `POST /matches/{id}/report|validate|reject|result|walkover|invalidate|postpone|resume`
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 7 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio). 80 testes passando. Migrations 0001–0003 aplicadas no Supabase (a 0003 adiciona `tournament_players.pot`; o Render a aplica sozinho no start se ainda não estiver). A Fase 7 não criou migration. Back-end implantado no Render.
+**Concluído:** Fases 1 a 8 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento). 86 testes passando. Migrations 0001–0003 aplicadas no Supabase; a **0004** (colunas novas em `matches` e `standings_snapshots`) é aplicada pelo Render no próximo start. Back-end implantado no Render.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, e repescagem em subtorneio (entrada automática dos candidatos e retorno ao mata-mata principal).
 
 ## Histórico de fases
@@ -110,15 +111,15 @@ backend/
 
 - **Fase 7 — Subtorneios na prática (repescagem):** `engine.rule_subtournament`/`set_enrolled`/`refresh_repechage` (ligação regra→subtorneio e inscrição automática dos candidatos), `_sync_dest` generalizado para destinos com fontes em torneios diferentes (principal + subtorneio, regras `parent_tournament`), `external_slots`/`repechage_slots` (vagas do mata-mata reservadas a quem volta), `PUT /tournaments/{id}/rules/{rule_id}/subtournament`, campo `repechage` no detalhe do torneio, restrição de jogadores do subtorneio ao principal, desistência do principal propagada ao subtorneio, subtorneio só inicia com o principal em andamento. Sem migration nova. 80 testes.
 
-## Próxima fase — Fase 8: histórico e auditoria
+- **Fase 8 — Histórico e adiamento:** `services/history.py` (registros `round` e `final` em `standings_snapshots`, colunas `kind`/`round`), migration 0004 (também adiciona `matches.postponed*`), `GET /tournaments/{id}/history/rounds|stages` e filtro `kind` em `/history`, adiamento de jogo/rodada (`POST /matches/{id}/postpone|resume`, `POST /tournaments/{id}/rounds/postpone|resume`), filtro `postponed` em `/matches`, bloqueio de encerramento manual com jogo adiado pendente. 86 testes.
 
-1. Consulta do histórico de tabelas/resultados por torneio (hoje: `GET /tournaments/{id}/history[/{snapshot_id}]`), incluindo a linha do tempo de um confronto (reportes, rejeições, correções).
-2. Endpoint de consulta do `audit_log` para admin, com filtros (ator, ação, entidade, período) e paginação.
-3. Testes e atualização deste documento ao concluir.
+## Próxima fase — Fase 9: front-end básico (branch `front-end`)
+
+Ver o roadmap abaixo; antes de começar, discutir o design com o usuário. Pendente do antigo escopo da Fase 8 (a fazer quando convier): consulta do `audit_log` por admin com filtros (ator, ação, entidade, período) e paginação, e linha do tempo de um confronto (reportes, rejeições, correções).
 
 ## Roadmap restante
 
-- **Fase 9 — Front-end básico** (branch `front-end`): login/cadastro, lista de torneios, página do torneio (info + tabela/chaveamento + botão do subtorneio), página do confronto com reporte, painel do admin. Tempo real por polling (ou WebSocket).
+- **Fase 9 — Front-end básico** (branch `front-end`; inclui a aba de histórico com rodadas e estados finais das fases): login/cadastro, lista de torneios, página do torneio (info + tabela/chaveamento + botão do subtorneio), página do confronto com reporte, painel do admin. Tempo real por polling (ou WebSocket).
 - **Fase 10 — Polimento e deploy:** hospedagem da API e do front, CORS, variáveis de ambiente, documentação; avaliar notificações no Discord.
 
 ## Perguntas em aberto / ideias

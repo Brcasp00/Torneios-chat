@@ -128,6 +128,12 @@ class Match(Base, TimestampMixin):
     next_match_id: Mapped[int | None] = mapped_column(ForeignKey("matches.id", ondelete="SET NULL"))
     next_slot: Mapped[int | None] = mapped_column(SmallInteger)
     validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Adiamento (pontos corridos/grupos): o jogo segue valendo, mas a fase não encerra enquanto ele estiver pendente.
+    # O sinal fica gravado mesmo depois de o jogo ser disputado (histórico).
+    postponed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    postponed_reason: Mapped[str | None] = mapped_column(Text)
+    postponed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    postponed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class MatchReport(Base, TimestampMixin):
@@ -155,11 +161,17 @@ class StandingsSnapshot(Base, TimestampMixin):
     """Histórico: tabela/chaveamento congelado a cada alteração relevante."""
 
     __tablename__ = "standings_snapshots"
-    __table_args__ = (Index("ix_standings_snapshots_tournament", "tournament_id", "stage_id"),)
+    __table_args__ = (
+        Index("ix_standings_snapshots_tournament", "tournament_id", "stage_id"),
+        CheckConstraint("kind in ('change','round','final')", name="kind_valid"),
+    )
 
     id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
     tournament_id: Mapped[int] = mapped_column(ForeignKey("tournaments.id", ondelete="CASCADE"))
     stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id", ondelete="CASCADE"))
+    # change = registro de cada alteração; round = tabela ao fechar uma rodada (liga/grupos); final = estado final da fase
+    kind: Mapped[str] = mapped_column(String(12), default="change", server_default="change")
+    round: Mapped[int | None] = mapped_column(SmallInteger)
     group_label: Mapped[str | None] = mapped_column(String(8))
     reason: Mapped[str | None] = mapped_column(String(120))
     triggered_by_match_id: Mapped[int | None] = mapped_column(ForeignKey("matches.id", ondelete="SET NULL"))

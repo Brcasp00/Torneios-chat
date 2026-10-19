@@ -77,6 +77,8 @@ class MatchOut(BaseModel):
     is_walkover: bool
     validated_at: datetime | None
     has_pending_report: bool = False
+    postponed: bool = False
+    postponed_reason: str | None = None
 
 
 class MatchDetail(MatchOut):
@@ -122,11 +124,53 @@ class SnapshotOut(BaseModel):
     stage_id: int | None
     reason: str | None
     triggered_by_match_id: int | None
+    kind: str = "change"
+    round: int | None = None
     created_at: datetime
 
 
 class SnapshotDetail(SnapshotOut):
+    tournament_id: int
     data: dict
+
+
+class RoundHistory(BaseModel):
+    """Tabela congelada ao fim de uma rodada (liga/grupos)."""
+
+    snapshot_id: int
+    tournament_id: int
+    stage_id: int
+    stage_name: str
+    round: int
+    created_at: datetime
+    reopened: bool = False  # a rodada voltou a ter jogo em aberto depois de registrada
+    postponed: list[dict] = []  # jogos adiados ainda pendentes quando a tabela foi gravada
+    played_postponed: list[dict] = []  # jogos adiados que foram disputados e entram nesta tabela
+    data: dict
+
+
+class StageHistory(BaseModel):
+    """Estado final de uma fase (do torneio ou de um subtorneio): tabela, grupos ou chaveamento."""
+
+    snapshot_id: int
+    tournament_id: int
+    tournament_name: str
+    stage_id: int
+    stage_name: str
+    stage_type: str
+    created_at: datetime
+    versions: int  # 1 = nunca corrigida depois de encerrar
+    data: dict
+
+
+class PostponeIn(BaseModel):
+    reason: str | None = Field(None, max_length=300)
+
+
+class RoundPostponeIn(PostponeIn):
+    stage_id: int
+    round: int = Field(ge=1)
+    group_label: str | None = Field(None, max_length=8, description="Em fase de grupos: só este grupo (padrão: todos)")
 
 
 class Arrangement(BaseModel):

@@ -331,6 +331,16 @@ async def set_status(tournament_id: int, data: StatusIn, user: StaffUser, sessio
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Para iniciar o torneio use POST /tournaments/{id}/start (faz o sorteio e gera os confrontos)."
         )
+    if data.status == "finished":
+        pending = await session.scalar(
+            select(func.count()).select_from(Match).where(
+                Match.tournament_id == t.id, Match.postponed.is_(True), Match.status.in_(("scheduled", "reported"))
+            )
+        )
+        if pending:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, f"Há {pending} confronto(s) adiado(s) pendente(s); o torneio só encerra depois de eles serem disputados."
+            )
     old = t.status
     t.status = data.status
     session.add(

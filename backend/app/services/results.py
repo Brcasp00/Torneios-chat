@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 
 from app.models import Match, MatchReport, Stage, StandingsSnapshot, Tournament, TournamentPlayer
-from app.services import engine, tables
+from app.services import engine, history, tables
 from app.services.bracket import THIRD_PLACE
 
 REPLAY_RE = re.compile(r"^https://replay\.pokemonshowdown\.com/[A-Za-z0-9._\-/]+$")
@@ -192,25 +192,6 @@ async def settle_withdrawn(session, t: Tournament, stage: Stage) -> bool:
 
 
 # ---------- tabela / histórico ----------
-async def _snapshot_data(session, t: Tournament, stage: Stage) -> dict:
-    if stage.type == "league":
-        return {"rows": [r.as_dict() for r in await tables.table_for_stage(session, t, stage)]}
-    if stage.type == "groups":
-        gt = await tables.group_tables(session, t, stage)
-        return {"groups": {label: [r.as_dict() for r in rows] for label, rows in gt.items()}}
-    ms = await tables.stage_matches(session, stage)
-    return {
-        "matches": [
-            {
-                "id": m.id, "round": m.round, "slot": m.slot, "group_label": m.group_label,
-                "player1_id": m.player1_id, "player2_id": m.player2_id, "winner_id": m.winner_id,
-                "status": m.status, "p1_wins": m.p1_wins, "p2_wins": m.p2_wins,
-            }
-            for m in ms
-        ]
-    }
-
-
 async def recalc(session, t: Tournament, stage: Stage, reason: str, match_id: int | None = None) -> None:
     """Salva um snapshot, atualiza o estado da fase/torneio e aciona as regras de passagem."""
     await session.flush()
@@ -220,7 +201,7 @@ async def recalc(session, t: Tournament, stage: Stage, reason: str, match_id: in
             stage_id=stage.id,
             reason=reason,
             triggered_by_match_id=match_id,
-            data=await _snapshot_data(session, t, stage),
+            data=await history.snapshot_data(session, t, stage),
         )
     )
     open_matches = await session.scalar(
@@ -240,6 +221,8 @@ async def recalc(session, t: Tournament, stage: Stage, reason: str, match_id: in
             if t.status == "finished":
                 t.status = "running"
             await _reactivate(session, t, stage)
+        await session.flush()
+        await history.record(session, t, stage)  # rodadas fechadas e estado final da fase
         await engine.sync(session, t, stage)
 
 
@@ -291,3 +274,27 @@ async def apply_withdrawal(session, t: Tournament, user_id: int) -> None:
         stage = await session.get(Stage, sid)
         if await settle_withdrawn(session, t, stage):
             await recalc(session, t, stage, "Desistência de jogador (W.O. nos jogos pendentes)")
+
+
+# ---------- adiamento (pontos corridos / grupos) ----------
+def check_postponable(t: Tournament, stage: Stage) -> None:
+    if stage.type not in LEAGUE_LIKE:
+        raise ResultError("Só é possível adiar jogos de pontos corridos ou de fase de grupos.")
+    if t.status != "running":
+        raise ResultError("O torneio não está em andamento.")
+
+
+def postpone(m: Match, user_id: int, reason: str | None) -> bool:
+    """Marca o confronto como adiado. Retorna False se ele não pode ser adiado (já decidido, reportado ou adiado)."""
+    if m.status != "scheduled" or m.postponed:
+        return False
+    m.postponed, m.postponed_reason, m.postponed_by, m.postponed_at = True, reason, user_id, _now()
+    return True
+
+
+def resume(m: Match) -> bool:
+    """Tira o adiamento de um jogo ainda não decidido. Depois de disputado, o sinal fica no histórico."""
+    if not m.postponed or m.status == "validated":
+        return False
+    m.postponed = False
+    return True

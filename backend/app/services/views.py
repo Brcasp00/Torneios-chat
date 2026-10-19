@@ -46,6 +46,8 @@ async def matches_out(session, matches: list[Match]) -> list[MatchOut]:
             is_walkover=m.is_walkover,
             validated_at=m.validated_at,
             has_pending_report=m.id in pending,
+            postponed=bool(m.postponed),
+            postponed_reason=m.postponed_reason,
         )
         for m in matches
     ]

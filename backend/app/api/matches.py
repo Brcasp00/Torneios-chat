@@ -8,6 +8,7 @@ from app.models import AuditLog, Match, MatchReport, Stage, Tournament, Tourname
 from app.schemas.match import (
     MatchDetail,
     NoteIn,
+    PostponeIn,
     ReportIn,
     ReportOut,
     ResultIn,
@@ -240,5 +241,38 @@ async def invalidate(match_id: int, data: NoteIn, user: StaffUser, session: Sess
         r.status, r.review_note = "rejected", f"Invalidado por {user.name}: {data.note or 'sem motivo informado'}"
     _log(session, user, "match.invalidate", m, {"note": data.note})
     await _after(session, t, stage, m, old_outcome, f"Resultado invalidado (confronto #{m.id})")
+    await session.commit()
+    return await _detail(session, m, t, stage, user)
+
+
+@router.post("/{match_id}/postpone", response_model=MatchDetail)
+async def postpone_match(match_id: int, data: PostponeIn, user: StaffUser, session: SessionDep):
+    """Adia um confronto de pontos corridos/grupos (só admin ou organizador do torneio).
+
+    O jogo continua podendo ser reportado e a fase não encerra enquanto ele estiver pendente.
+    """
+    m, t, stage = await _load(session, match_id, lock=True)
+    _staff_guard(user, t)
+    try:
+        results.check_postponable(t, stage)
+    except results.ResultError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    if not results.postpone(m, user.id, data.reason):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Só é possível adiar um confronto pendente que ainda não foi adiado.")
+    _log(session, user, "match.postpone", m, {"reason": data.reason})
+    await results.recalc(session, t, stage, f"Confronto #{m.id} adiado", m.id)
+    await session.commit()
+    return await _detail(session, m, t, stage, user)
+
+
+@router.post("/{match_id}/resume", response_model=MatchDetail)
+async def resume_match(match_id: int, user: StaffUser, session: SessionDep):
+    """Tira o adiamento de um confronto que ainda não foi disputado."""
+    m, t, stage = await _load(session, match_id, lock=True)
+    _staff_guard(user, t)
+    if not results.resume(m):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Este confronto não está adiado ou já foi disputado.")
+    _log(session, user, "match.resume", m)
+    await results.recalc(session, t, stage, f"Adiamento do confronto #{m.id} removido", m.id)
     await session.commit()
     return await _detail(session, m, t, stage, user)
