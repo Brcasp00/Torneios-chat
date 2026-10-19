@@ -140,3 +140,18 @@ class DrawRound(BaseModel):
 class DrawOut(BaseModel):
     seed: int
     rounds: list[DrawRound]
+
+
+class BracketRound(BaseModel):
+    round: int
+    name: str
+    matches: list[MatchOut]
+
+
+class BracketStage(BaseModel):
+    stage_id: int
+    stage_name: str
+    status: str
+    rounds: list[BracketRound]
+    third_place: MatchOut | None = None
+    champion: PlayerRef | None = None
