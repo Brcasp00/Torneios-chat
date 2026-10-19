@@ -1,20 +1,25 @@
 """Rotas por torneio: sorteio, início, confrontos, tabelas, chaveamento e histórico."""
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.api.tournaments import _counts, _get_or_404, _require_manage, can_manage  # noqa: F401
+from app.api.tournaments import _counts, _get_or_404, _players_out, _require_manage, can_manage  # noqa: F401
 from app.core.deps import SessionDep, StaffUser
 from app.models import AuditLog, Match, Stage, StandingsSnapshot, Tournament, TournamentPlayer, User
 from app.schemas.match import (
+    Arrangement,
     BracketRound,
     BracketStage,
     DrawIn,
     DrawMatch,
     DrawOut,
+    DrawRecord,
     DrawRound,
     GroupTable,
     MatchOut,
     PlayerRef,
+    PotsIn,
     SnapshotDetail,
     SnapshotOut,
     StageStandings,
@@ -22,6 +27,7 @@ from app.schemas.match import (
 )
 from app.services import bracket, results, schedule, tables
 from app.services import stages as stage_service
+from app.schemas.tournament import PlayerOut
 from app.services.views import matches_out
 
 router = APIRouter(prefix="/tournaments", tags=["play"])
@@ -44,16 +50,56 @@ async def _first_stage(session, t: Tournament) -> Stage:
     return stage
 
 
-def _plan_or_409(stage: Stage, ids: list[int], seed: int) -> stage_service.Plan:
+async def _pots(session, t: Tournament) -> dict[int, int]:
+    rows = await session.execute(
+        select(TournamentPlayer.user_id, TournamentPlayer.pot).where(
+            TournamentPlayer.tournament_id == t.id, TournamentPlayer.pot.is_not(None)
+        )
+    )
+    return {uid: pot for uid, pot in rows.all()}
+
+
+def _plan_or_409(stage: Stage, ids: list[int], seed: int, data: DrawIn, pots: dict[int, int]) -> stage_service.Plan:
+    arrangement = data.arrangement.model_dump(exclude_none=True) if data.arrangement else None
     try:
-        return stage_service.plan_stage(stage, ids, seed, fed=False)
+        return stage_service.plan_stage(
+            stage, ids, seed, fed=False, pots=(pots if data.use_pots and not arrangement else None), arrangement=arrangement
+        )
     except stage_service.StageError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e))
 
 
+@router.put("/{tournament_id}/pots", response_model=list[PlayerOut])
+async def set_pots(tournament_id: int, data: PotsIn, user: StaffUser, session: SessionDep):
+    """Define (ou remove) o pote de cada jogador antes do sorteio. Pote 1 = mais forte / cabeças de chave."""
+    t = await _get_or_404(session, tournament_id)
+    _require_manage(user, t)
+    if t.status not in ("draft", "registration"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Os potes só podem ser alterados antes do sorteio.")
+    tps = {
+        tp.user_id: tp
+        for tp in (await session.scalars(select(TournamentPlayer).where(TournamentPlayer.tournament_id == t.id))).all()
+    }
+    missing = [a.user_id for a in data.assignments if a.user_id not in tps]
+    if missing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Jogadores não inscritos neste torneio: {sorted(set(missing))}")
+    for a in data.assignments:
+        tps[a.user_id].pot = a.pot
+    session.add(
+        AuditLog(actor_id=user.id, action="tournament.set_pots", entity="tournament", entity_id=t.id,
+                 data={str(a.user_id): a.pot for a in data.assignments})
+    )
+    await session.commit()
+    return await _players_out(session, t.id)
+
+
 @router.post("/{tournament_id}/draw", response_model=DrawOut)
 async def preview_draw(tournament_id: int, data: DrawIn, user: StaffUser, session: SessionDep):
-    """Sorteador: mostra os confrontos da primeira fase que seriam gerados, sem salvar. Use a mesma `seed` em /start."""
+    """Sorteador: mostra os confrontos da primeira fase que seriam gerados, sem salvar.
+
+    Aleatório por padrão; usa os potes definidos (`use_pots`); ou valida um arranjo manual (`arrangement`).
+    O `arrangement` devolvido pode ser ajustado e reenviado em /start. Use a mesma `seed` em /start.
+    """
     t = await _get_or_404(session, tournament_id)
     _require_manage(user, t)
     if t.status not in ("draft", "registration"):
@@ -64,23 +110,27 @@ async def preview_draw(tournament_id: int, data: DrawIn, user: StaffUser, sessio
     stage = await _first_stage(session, t)
     seed = data.seed or schedule.new_seed()
     names = dict(players)
-    plan = _plan_or_409(stage, [uid for uid, _ in players], seed)
+    plan = _plan_or_409(stage, [uid for uid, _ in players], seed, data, await _pots(session, t))
 
     def dm(a, b, leg=1, label=None):
         return DrawMatch(player1=PlayerRef(id=a, name=names[a]), player2=PlayerRef(id=b, name=names[b]), leg=leg, group_label=label)
 
+    arr = plan.arrangement()
+    arrangement = Arrangement(**arr) if arr else None
     if plan.bracket_slots is not None:
         pairs = bracket.first_round_pairs(plan.bracket_slots)
-        return DrawOut(seed=seed, rounds=[DrawRound(round=1, matches=[dm(a, b) for a, b in pairs])])
-    by_round: dict[int, list[DrawMatch]] = {}
-    for sp in plan.specs:
-        by_round.setdefault(sp.round, []).append(dm(sp.p1, sp.p2, sp.leg, sp.group_label))
-    return DrawOut(seed=seed, rounds=[DrawRound(round=r, matches=ms) for r, ms in sorted(by_round.items())])
+        rounds = [DrawRound(round=1, matches=[dm(a, b) for a, b in pairs])]
+    else:
+        by_round: dict[int, list[DrawMatch]] = {}
+        for sp in plan.specs:
+            by_round.setdefault(sp.round, []).append(dm(sp.p1, sp.p2, sp.leg, sp.group_label))
+        rounds = [DrawRound(round=r, matches=ms) for r, ms in sorted(by_round.items())]
+    return DrawOut(seed=seed, mode=plan.mode, rounds=rounds, arrangement=arrangement)
 
 
 @router.post("/{tournament_id}/start", response_model=list[MatchOut])
 async def start_tournament(tournament_id: int, data: DrawIn, user: StaffUser, session: SessionDep):
-    """Realiza o sorteio, gera os confrontos da primeira fase e coloca o torneio em andamento."""
+    """Realiza o sorteio (aleatório, por potes ou manual), gera os confrontos da 1ª fase e inicia o torneio."""
     t = await _get_or_404(session, tournament_id)
     _require_manage(user, t)
     if t.status not in ("draft", "registration"):
@@ -93,28 +143,49 @@ async def start_tournament(tournament_id: int, data: DrawIn, user: StaffUser, se
         )
     stage = await _first_stage(session, t)
     seed = data.seed or schedule.new_seed()
-    plan = _plan_or_409(stage, [uid for uid, _ in players], seed)
+    pots = await _pots(session, t)
+    plan = _plan_or_409(stage, [uid for uid, _ in players], seed, data, pots)
     created = await stage_service.materialize(session, t.id, stage, plan)
-    if plan.bracket_slots is not None:
-        for pos, uid in enumerate(plan.bracket_slots, start=1):  # posição no chaveamento vira o seed do jogador
+    if plan.seeds or plan.bracket_slots is not None:
+        seeds = plan.seeds or {uid: pos for pos, uid in enumerate(plan.bracket_slots, start=1)}
+        for uid, sd in seeds.items():  # seed do jogador = posição na chave (ou ranking dos potes)
             tp = await session.scalar(
                 select(TournamentPlayer).where(TournamentPlayer.tournament_id == t.id, TournamentPlayer.user_id == uid)
             )
-            tp.seed = pos
+            tp.seed = sd
     t.status = "running"
     stage.status = "running"
-    t.config = {**(t.config or {}), "draw_seed": seed}
+    record = {
+        "seed": seed,
+        "mode": plan.mode,
+        "drawn_at": datetime.now(timezone.utc).isoformat(),
+        "drawn_by": user.id,
+        "pots": {str(uid): pot for uid, pot in pots.items()} if plan.mode == "pots" else {},
+        "arrangement": plan.arrangement(),
+    }
+    t.config = {**(t.config or {}), "draw_seed": seed, "draw": record}
     session.add(
         AuditLog(actor_id=user.id, action="tournament.start", entity="tournament", entity_id=t.id,
-                 data={"seed": seed, "matches": len(created)})
+                 data={"seed": seed, "mode": plan.mode, "matches": len(created)})
     )
     await session.flush()
     try:
-        await results.recalc(session, t, stage, "Início do torneio")
+        await results.recalc(session, t, stage, f"Início do torneio (sorteio: {plan.mode})")
     except results.CascadeError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e))
     await session.commit()
     return await matches_out(session, created)
+
+
+@router.get("/{tournament_id}/draw", response_model=DrawRecord)
+async def draw_record(tournament_id: int, session: SessionDep):
+    """Registro público do sorteio realizado (seed, modo, potes e arranjo), para transparência."""
+    t = await _get_or_404(session, tournament_id)
+    rec = (t.config or {}).get("draw")
+    if not rec:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "O sorteio ainda não foi realizado.")
+    players = await _players_out(session, t.id)
+    return DrawRecord(**rec, players=[PlayerRef(id=p.user_id, name=p.name) for p in players])
 
 
 @router.get("/{tournament_id}/matches", response_model=list[MatchOut])

@@ -81,7 +81,7 @@ async def _players_out(session, tournament_id: int) -> list[PlayerOut]:
         .order_by(TournamentPlayer.seed.is_(None), TournamentPlayer.seed, User.name)
     )
     return [
-        PlayerOut(user_id=p.user_id, name=name, seed=p.seed, group_label=p.group_label, status=p.status)
+        PlayerOut(user_id=p.user_id, name=name, seed=p.seed, group_label=p.group_label, pot=p.pot, status=p.status)
         for p, name in rows.all()
     ]
 

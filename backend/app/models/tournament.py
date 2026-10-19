@@ -85,6 +85,7 @@ class TournamentPlayer(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("tournament_id", "user_id", name="uq_tournament_players_tournament_user"),
         CheckConstraint("status in ('active','eliminated','withdrawn')", name="status_valid"),
+        CheckConstraint("pot is null or (pot >= 1 and pot <= 8)", name="pot_valid"),
     )
 
     id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
@@ -92,6 +93,7 @@ class TournamentPlayer(Base, TimestampMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     seed: Mapped[int | None] = mapped_column(SmallInteger)
     group_label: Mapped[str | None] = mapped_column(String(8))
+    pot: Mapped[int | None] = mapped_column(SmallInteger)  # pote/cabeça de chave para o sorteio (1 = mais forte)
     status: Mapped[str] = mapped_column(String(12), default="active", server_default="active")
 
 

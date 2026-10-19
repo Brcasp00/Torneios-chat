@@ -129,8 +129,18 @@ class SnapshotDetail(SnapshotOut):
     data: dict
 
 
+class Arrangement(BaseModel):
+    """Arranjo manual da 1ª fase (use somente o campo que se aplica ao tipo da fase)."""
+
+    slots: list[int] | None = Field(None, description="Mata-mata: jogadores na ordem do chaveamento (pares adjacentes se enfrentam)")
+    groups: dict[str, list[int]] | None = Field(None, description="Grupos: {'A': [ids], 'B': [ids]}")
+    pairs: list[list[int]] | None = Field(None, description="Rodada única/playoff: [[id, id], ...]")
+
+
 class DrawIn(BaseModel):
     seed: int | None = Field(None, ge=1, lt=2**31, description="Semente do sorteio (omita para sortear uma nova)")
+    use_pots: bool = Field(True, description="Usar os potes definidos (se houver)")
+    arrangement: Arrangement | None = Field(None, description="Sorteio manual: substitui o sorteio aleatório")
 
 
 class DrawMatch(BaseModel):
@@ -147,7 +157,28 @@ class DrawRound(BaseModel):
 
 class DrawOut(BaseModel):
     seed: int
+    mode: str = "random"
     rounds: list[DrawRound]
+    arrangement: Arrangement | None = None  # reenvie (após ajustar) em /start para sortear manualmente
+
+
+class PotAssignment(BaseModel):
+    user_id: int
+    pot: int | None = Field(None, ge=1, le=8, description="1 = pote mais forte; null remove o pote")
+
+
+class PotsIn(BaseModel):
+    assignments: list[PotAssignment] = Field(min_length=1, max_length=256)
+
+
+class DrawRecord(BaseModel):
+    seed: int
+    mode: str
+    drawn_at: datetime | None = None
+    drawn_by: int | None = None
+    pots: dict[str, int] = {}
+    arrangement: Arrangement | None = None
+    players: list[PlayerRef] = []
 
 
 class BracketRound(BaseModel):

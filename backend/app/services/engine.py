@@ -4,6 +4,8 @@
 - Se um resultado de origem muda depois, o destino é refeito, desde que nenhum confronto dele tenha sido
   reportado/validado; senão a mudança é bloqueada (CascadeError -> HTTP 409) e nada é gravado.
 """
+import random
+
 from sqlalchemy import delete, select
 
 from app.models import AdvancementRule, Match, MatchReport, Stage, Tournament, TournamentPlayer
@@ -17,23 +19,21 @@ class EngineError(ValueError):
 
 
 # ---------- saídas de uma fase ----------
-def _seed_key(seeds: dict[int, int | None]):
-    return lambda uid: (seeds.get(uid) if seeds.get(uid) is not None else 10**6, uid)
+def _tiebreak_key(t: Tournament, stage: Stage):
+    """Desempate final por SORTEIO reproduzível: depende só da seed do torneio, da fase e do jogador."""
+    base = (t.config or {}).get("draw_seed", 1)
 
+    def key(uid: int):
+        return (random.Random(f"{base}:{stage.id}:{uid}").random(), uid)
 
-async def _seeds(session, t: Tournament) -> dict[int, int | None]:
-    rows = await session.execute(
-        select(TournamentPlayer.user_id, TournamentPlayer.seed).where(TournamentPlayer.tournament_id == t.id)
-    )
-    return {uid: seed for uid, seed in rows.all()}
+    return key
 
 
 async def compute_outputs(session, t: Tournament, stage: Stage) -> dict:
     """{'ranking': [...], 'winners': [...], 'losers': [...], 'groups': {rótulo: [jogadores por posição]}}"""
     matches = await tables.stage_matches(session, stage)
     validated = [m for m in matches if m.status == "validated"]
-    seeds = await _seeds(session, t)
-    key = _seed_key(seeds)
+    key = _tiebreak_key(t, stage)
     out: dict = {"ranking": [], "winners": [], "losers": [], "groups": {}}
 
     if stage.type == "league":
@@ -228,7 +228,9 @@ async def _sync_dest(session, t: Tournament, dest: Stage) -> None:
     ordered = [placements[i] for i in range(1, n + 1)]
     base_seed = (t.config or {}).get("draw_seed", 1)
     try:
-        plan = stage_service.plan_stage(dest, ordered, base_seed, fed=True)
+        # Vagas vindas de cruzamento de grupos já são posições da chave; nos demais casos o padrão é por seed (1xN).
+        default_seeding = "sequential" if any(r.source == "group_position" for r in incoming) else "standard"
+        plan = stage_service.plan_stage(dest, ordered, base_seed, fed=True, default_seeding=default_seeding)
     except stage_service.StageError as e:
         raise results.CascadeError(str(e))
     await stage_service.materialize(session, t.id, dest, plan)

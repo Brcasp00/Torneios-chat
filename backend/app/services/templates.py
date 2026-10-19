@@ -80,7 +80,11 @@ def build(data: TournamentCreate) -> tuple[list[StageIn], list[RuleIn], dict]:
                 "qualifiers_per_group": q,
             },
         ),
-        StageIn(name="Mata-mata", type="knockout", config={"best_of": cfg["best_of"], "third_place": cfg["third_place"]}),
+        StageIn(
+            name="Mata-mata",
+            type="knockout",
+            config={"best_of": cfg["best_of"], "third_place": cfg["third_place"], "seeding": "sequential"},
+        ),
     ]
     rules = [
         RuleIn(

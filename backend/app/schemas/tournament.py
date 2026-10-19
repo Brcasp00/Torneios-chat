@@ -140,6 +140,7 @@ class PlayerOut(BaseModel):
     name: str
     seed: int | None
     group_label: str | None
+    pot: int | None = None
     status: str
 
 
