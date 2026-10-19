@@ -15,7 +15,9 @@ from app.models import (
 )
 from app.schemas.tournament import (
     AddPlayersIn,
+    LinkSubIn,
     PlayerOut,
+    RepechageOut,
     RuleOut,
     StageOut,
     StatusIn,
@@ -24,7 +26,7 @@ from app.schemas.tournament import (
     TournamentSummary,
     TournamentUpdate,
 )
-from app.services import results, templates
+from app.services import engine, results, templates
 
 router = APIRouter(prefix="/tournaments", tags=["tournaments"])
 
@@ -94,6 +96,17 @@ async def _detail(session, t: Tournament, user: User | None) -> TournamentDetail
     subs = (await session.scalars(select(Tournament).where(Tournament.parent_id == t.id).order_by(Tournament.id))).all()
     parent = await session.get(Tournament, t.parent_id) if t.parent_id else None
     counts = await _counts(session, [t.id] + [s.id for s in subs] + ([parent.id] if parent else []))
+    pool = (t.config or {}).get("repechage") or {}
+    repechage = []
+    for r in (x for x in rules if x.target == "repechage"):
+        sub = await engine.rule_subtournament(session, t, r)
+        enrolled = ((sub.config or {}).get("auto_enrolled") or {}).get(str(r.id)) if sub else None
+        repechage.append(
+            RepechageOut(
+                rule_id=r.id, stage_id=r.from_stage_id, subtournament_id=sub.id if sub else None,
+                user_ids=enrolled if enrolled is not None else pool.get(str(r.from_stage_id), []),
+            )
+        )
     return TournamentDetail(
         **_summary(t, counts.get(t.id, 0)).model_dump(),
         battle_rules=t.battle_rules,
@@ -104,6 +117,7 @@ async def _detail(session, t: Tournament, user: User | None) -> TournamentDetail
         rules=[RuleOut.model_validate(r) for r in rules],
         players=await _players_out(session, t.id),
         subtournaments=[_summary(s, counts.get(s.id, 0)) for s in subs],
+        repechage=repechage,
         parent=_summary(parent, counts.get(parent.id, 0)) if parent else None,
         can_manage=can_manage(user, t),
     )
@@ -111,12 +125,32 @@ async def _detail(session, t: Tournament, user: User | None) -> TournamentDetail
 
 async def _create_structure(session, t: Tournament, data: TournamentCreate, parent: Tournament | None) -> dict:
     """Gera fases e regras de passagem do torneio e devolve a config final."""
+    to_parent: list[tuple[int, int, int]] = []
     try:
         stages_in, rules_in, cfg = templates.build(data)
         if data.template == "custom":
-            templates.validate_custom(stages_in, rules_in, is_subtournament=parent is not None, max_players=data.max_players)
+            to_parent = templates.validate_custom(
+                stages_in, rules_in, is_subtournament=parent is not None, max_players=data.max_players
+            )
     except templates.TemplateError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+
+    if parent and to_parent:
+        # O subtorneio só pode devolver jogadores às vagas que a fase do principal reservou (config.external_slots).
+        parent_stages = {
+            s.position: s for s in (await session.scalars(select(Stage).where(Stage.tournament_id == parent.id))).all()
+        }
+        for pos, first, last in to_parent:
+            target = parent_stages.get(pos)
+            if target is None:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"O torneio principal não tem a fase {pos}.")
+            reserved = templates.external_slots(target.config)
+            if not any(a <= first and last <= b for a, b in reserved):
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    f"A fase {pos} ('{target.name}') do torneio principal não reserva as vagas {first} a {last} para "
+                    "quem volta da repescagem (config.external_slots / repechage_slots).",
+                )
 
     stage_ids: dict[int, int] = {}
     for i, s in enumerate(stages_in, start=1):
@@ -180,6 +214,12 @@ async def _new_tournament(session, data: TournamentCreate, user: User, parent: T
             data={"name": t.name, "template": t.template},
         )
     )
+    if parent:
+        await session.flush()
+        try:  # se a fase de origem da repescagem já terminou, os candidatos entram agora
+            await engine.refresh_repechage(session, parent)
+        except results.CascadeError as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e))
     await session.commit()
     await session.refresh(t)
     return t
@@ -302,6 +342,45 @@ async def set_status(tournament_id: int, data: StatusIn, user: StaffUser, sessio
     return await _detail(session, t, user)
 
 
+@router.put("/{tournament_id}/rules/{rule_id}/subtournament", response_model=TournamentDetail)
+async def link_subtournament(tournament_id: int, rule_id: int, data: LinkSubIn, user: StaffUser, session: SessionDep):
+    """Escolhe o subtorneio que recebe os candidatos de uma regra de repescagem.
+
+    Só é necessário quando há mais de um subtorneio (com um só, a ligação é automática). Os candidatos já definidos
+    são inscritos no novo subtorneio e retirados do antigo (se este ainda não começou).
+    """
+    t = await _get_or_404(session, tournament_id)
+    _require_manage(user, t)
+    rule = await session.get(AdvancementRule, rule_id)
+    if not rule or rule.tournament_id != t.id or rule.target != "repechage":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Regra de repescagem não encontrada neste torneio.")
+    new_sub = None
+    if data.subtournament_id is not None:
+        new_sub = await session.get(Tournament, data.subtournament_id)
+        if not new_sub or new_sub.parent_id != t.id or new_sub.status == "cancelled":
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Subtorneio inválido para este torneio.")
+    try:
+        old = await engine.rule_subtournament(session, t, rule)
+        if old and (new_sub is None or old.id != new_sub.id):
+            await engine.set_enrolled(session, old, rule.id, [], set())
+        cfg = dict(rule.config or {})
+        if new_sub:
+            cfg["subtournament_id"] = new_sub.id
+        else:
+            cfg.pop("subtournament_id", None)
+        rule.config = cfg
+        await session.flush()
+        await engine.refresh_repechage(session, t)
+    except results.CascadeError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    session.add(
+        AuditLog(actor_id=user.id, action="tournament.link_subtournament", entity="tournament", entity_id=t.id,
+                 data={"rule_id": rule.id, "subtournament_id": data.subtournament_id})
+    )
+    await session.commit()
+    return await _detail(session, t, user)
+
+
 @router.delete("/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tournament(tournament_id: int, user: StaffUser, session: SessionDep):
     t = await _get_or_404(session, tournament_id)
@@ -337,6 +416,22 @@ async def add_players(tournament_id: int, data: AddPlayersIn, user: StaffUser, s
     if missing:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Usuários não encontrados ou inativos: {sorted(missing)}")
 
+    if t.parent_id:  # subtorneio (repescagem): só entram jogadores do torneio principal
+        in_parent = set(
+            (
+                await session.scalars(
+                    select(TournamentPlayer.user_id).where(
+                        TournamentPlayer.tournament_id == t.parent_id, TournamentPlayer.status != "withdrawn"
+                    )
+                )
+            ).all()
+        )
+        outside = set(wanted) - in_parent
+        if outside:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, f"Só jogadores do torneio principal podem entrar no subtorneio: {sorted(outside)}"
+            )
+
     existing = set(
         (await session.scalars(select(TournamentPlayer.user_id).where(TournamentPlayer.tournament_id == t.id))).all()
     )
@@ -365,14 +460,30 @@ async def _remove_player(session, t: Tournament, user_id: int, actor: User, acti
     )
     if not tp or tp.status == "withdrawn":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Jogador não está inscrito neste torneio.")
+    try:
+        await _drop_player(session, t, tp)
+        # Quem sai do principal também sai dos subtorneios em que estava (repescagem ainda não encerrada).
+        for sub in (await session.scalars(select(Tournament).where(Tournament.parent_id == t.id))).all():
+            if sub.status in ("finished", "cancelled"):
+                continue
+            sub_tp = await session.scalar(
+                select(TournamentPlayer).where(TournamentPlayer.tournament_id == sub.id, TournamentPlayer.user_id == user_id)
+            )
+            if sub_tp and sub_tp.status != "withdrawn":
+                await _drop_player(session, sub, sub_tp)
+    except results.CascadeError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    session.add(AuditLog(actor_id=actor.id, action=action, entity="tournament", entity_id=t.id, data={"user_id": user_id}))
+    await session.commit()
+
+
+async def _drop_player(session, t: Tournament, tp: TournamentPlayer) -> None:
     if t.status in EDITABLE:
         await session.delete(tp)  # antes do início: simplesmente sai da lista
     else:
         tp.status = "withdrawn"  # em andamento: fica registrado e os jogos em aberto viram W.O. para os adversários
         await session.flush()
-        await results.apply_withdrawal(session, t, user_id)
-    session.add(AuditLog(actor_id=actor.id, action=action, entity="tournament", entity_id=t.id, data={"user_id": user_id}))
-    await session.commit()
+        await results.apply_withdrawal(session, t, tp.user_id)
 
 
 @router.delete("/{tournament_id}/players/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -36,6 +36,7 @@ class TournamentConfig(BaseModel):
     groups_count: int | None = Field(None, ge=2, le=32)
     qualifiers_per_group: int = Field(2, ge=1, le=16)
     repechage_position: int | None = Field(None, ge=1, le=16, description="Ex.: 3 = o 3º de cada grupo vai à repescagem")
+    repechage_slots: int = Field(0, ge=0, le=64, description="Vagas do mata-mata reservadas a quem volta de um subtorneio")
     tiebreakers: list[Literal["saldo", "vitorias", "confronto_direto"]] = ["saldo", "vitorias", "confronto_direto"]
 
 
@@ -157,6 +158,19 @@ class TournamentSummary(BaseModel):
     players_count: int = 0
 
 
+class LinkSubIn(BaseModel):
+    subtournament_id: int | None = None  # None desfaz a ligação explícita (volta ao "único subtorneio", se houver)
+
+
+class RepechageOut(BaseModel):
+    """Regra de repescagem: de qual fase vêm os candidatos e para qual subtorneio vão."""
+
+    rule_id: int
+    stage_id: int
+    subtournament_id: int | None
+    user_ids: list[int]  # candidatos já definidos (vazio enquanto a fase de origem não terminou)
+
+
 class TournamentDetail(TournamentSummary):
     battle_rules: dict | None
     rules_text: str | None
@@ -166,5 +180,6 @@ class TournamentDetail(TournamentSummary):
     rules: list[RuleOut]
     players: list[PlayerOut]
     subtournaments: list[TournamentSummary]
+    repechage: list[RepechageOut] = []
     parent: TournamentSummary | None = None
     can_manage: bool = False

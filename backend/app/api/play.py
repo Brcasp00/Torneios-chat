@@ -135,6 +135,10 @@ async def start_tournament(tournament_id: int, data: DrawIn, user: StaffUser, se
     _require_manage(user, t)
     if t.status not in ("draft", "registration"):
         raise HTTPException(status.HTTP_409_CONFLICT, "O torneio já foi iniciado.")
+    if t.parent_id:
+        parent = await session.get(Tournament, t.parent_id)
+        if parent.status != "running":
+            raise HTTPException(status.HTTP_409_CONFLICT, "O subtorneio só pode começar com o torneio principal em andamento.")
     players = await _active_players(session, t)
     if len(players) != t.max_players:
         raise HTTPException(

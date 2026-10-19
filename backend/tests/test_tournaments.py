@@ -195,16 +195,19 @@ async def test_subtournament(client):
     adm = await admin_token(client)
     parent = (await create(
         client, adm, template="groups_knockout", max_players=16,
-        config={"groups_count": 4, "qualifiers_per_group": 2, "repechage_position": 3},
+        config={"groups_count": 2, "qualifiers_per_group": 1, "repechage_position": 3, "repechage_slots": 2},
     )).json()
     sub_body = {
         "name": "Repescagem", "template": "custom", "max_players": 4,
         "stages": [{"name": "Mata-mata", "type": "knockout"}],
         "rules": [{
             "from_stage": 1, "source": "ranking", "pos_from": 1, "pos_to": 2,
-            "target": "parent_tournament", "parent_stage": 2, "to_slot_from": 5,
+            "target": "parent_tournament", "parent_stage": 2, "to_slot_from": 3,
         }],
     }
+    # vagas que o principal não reservou (5 e 6) são recusadas
+    wrong = dict(sub_body, rules=[dict(sub_body["rules"][0], to_slot_from=5)])
+    assert (await client.post(f"/tournaments/{parent['id']}/subtournaments", json=wrong, headers=auth(adm))).status_code == 422
     r = await client.post(f"/tournaments/{parent['id']}/subtournaments", json=sub_body, headers=auth(adm))
     assert r.status_code == 201, r.text
     sub = r.json()

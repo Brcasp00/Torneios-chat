@@ -60,15 +60,26 @@ def build(data: TournamentCreate) -> tuple[list[StageIn], list[RuleIn], dict]:
         raise TemplateError("Há grupos demais para essa quantidade de jogadores (mínimo 2 por grupo).")
     if q >= per_group:
         raise TemplateError("Classificados por grupo deve ser menor que o tamanho do grupo.")
-    if not is_power_of_two(groups * q):
+    direct = groups * q
+    reserved = cfg["repechage_slots"]
+    if not is_power_of_two(direct + reserved):
+        extra = f" + {reserved} vagas de repescagem" if reserved else ""
         raise TemplateError(
-            f"{groups} grupos x {q} classificados = {groups * q} vagas no mata-mata; "
+            f"{groups} grupos x {q} classificados{extra} = {direct + reserved} vagas no mata-mata; "
             "o total precisa ser potência de 2 (sem byes)."
         )
+    if reserved and cfg["repechage_position"] is None:
+        raise TemplateError("Vagas de repescagem no mata-mata exigem 'repechage_position' (de onde vêm os candidatos).")
     rep = cfg["repechage_position"]
     if rep is not None and not (q < rep <= per_group):
         raise TemplateError("A posição de repescagem deve ser maior que os classificados e caber no grupo.")
 
+    ko_config = {"best_of": cfg["best_of"], "third_place": cfg["third_place"], "seeding": "sequential"}
+    if reserved:
+        # Quem volta da repescagem ocupa as últimas vagas; a chave por seed (1xN) coloca os classificados dos grupos
+        # (primeiras vagas) contra os repescados.
+        ko_config["seeding"] = "standard"
+        ko_config["external_slots"] = [[direct + 1, direct + reserved]]
     stages = [
         StageIn(
             name="Fase de grupos",
@@ -80,11 +91,7 @@ def build(data: TournamentCreate) -> tuple[list[StageIn], list[RuleIn], dict]:
                 "qualifiers_per_group": q,
             },
         ),
-        StageIn(
-            name="Mata-mata",
-            type="knockout",
-            config={"best_of": cfg["best_of"], "third_place": cfg["third_place"], "seeding": "sequential"},
-        ),
+        StageIn(name="Mata-mata", type="knockout", config=ko_config),
     ]
     rules = [
         RuleIn(
@@ -116,9 +123,29 @@ def _groups_of(stage: StageIn, n_in: int) -> int:
     return stage.config.get("groups_count") or default_groups_count(max(n_in, 4))
 
 
-def validate_custom(stages: list[StageIn], rules: list[RuleIn], is_subtournament: bool, max_players: int) -> None:
-    """Valida a estrutura de um torneio personalizado: referências, tamanhos, vagas contínuas e posições possíveis."""
+def external_slots(config: dict | None) -> list[tuple[int, int]]:
+    """Vagas de uma fase reservadas a jogadores que voltam de subtorneios (`config.external_slots`: [[de, até], ...])."""
+    out = []
+    for item in (config or {}).get("external_slots") or []:
+        try:
+            a, b = int(item[0]), int(item[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            raise TemplateError("'external_slots' deve ser uma lista de intervalos [de, até].")
+        if a < 1 or b < a:
+            raise TemplateError("'external_slots' tem um intervalo inválido.")
+        out.append((a, b))
+    return out
+
+
+def validate_custom(
+    stages: list[StageIn], rules: list[RuleIn], is_subtournament: bool, max_players: int
+) -> list[tuple[int, int, int]]:
+    """Valida a estrutura de um torneio personalizado: referências, tamanhos, vagas contínuas e posições possíveis.
+
+    Retorna as vagas que um subtorneio envia ao principal: [(fase do principal, vaga inicial, vaga final)].
+    """
     n = len(stages)
+    to_parent: list[tuple[int, int, int]] = []
     for r in rules:
         if r.from_stage > n:
             raise TemplateError(f"Regra referencia a fase {r.from_stage}, mas existem só {n} fases.")
@@ -139,7 +166,7 @@ def validate_custom(stages: list[StageIn], rules: list[RuleIn], is_subtournament
         stage = stages[pos - 1]
         size = n_in.get(pos, 0)
         if pos > 1:
-            ranges = sorted(slots_by_stage.get(pos, []))
+            ranges = sorted(slots_by_stage.get(pos, []) + external_slots(stage.config))
             if not ranges:
                 raise TemplateError(f"A fase {pos} ('{stage.name}') não recebe jogadores de nenhuma regra.")
             expected = 1
@@ -185,3 +212,6 @@ def validate_custom(stages: list[StageIn], rules: list[RuleIn], is_subtournament
             used.setdefault(r.source, []).append((r.pos_from, r.pos_to))
             if r.target == "stage":
                 slots_by_stage.setdefault(r.to_stage, []).append((r.to_slot_from, r.to_slot_from + count - 1))
+            elif r.target == "parent_tournament":
+                to_parent.append((r.parent_stage, r.to_slot_from, r.to_slot_from + count - 1))
+    return to_parent
