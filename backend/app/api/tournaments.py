@@ -114,7 +114,7 @@ async def _create_structure(session, t: Tournament, data: TournamentCreate, pare
     try:
         stages_in, rules_in, cfg = templates.build(data)
         if data.template == "custom":
-            templates.validate_custom(stages_in, rules_in, is_subtournament=parent is not None)
+            templates.validate_custom(stages_in, rules_in, is_subtournament=parent is not None, max_players=data.max_players)
     except templates.TemplateError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
 

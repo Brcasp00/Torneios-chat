@@ -61,6 +61,7 @@ class MatchOut(BaseModel):
     tournament_id: int
     stage_id: int
     round: int
+    slot: int | None = None
     group_label: str | None
     leg: int
     best_of: int
@@ -101,11 +102,17 @@ class StandingRow(BaseModel):
     saldo: int
 
 
+class GroupTable(BaseModel):
+    label: str
+    rows: list[StandingRow]
+
+
 class StageStandings(BaseModel):
     stage_id: int
     stage_name: str
     stage_type: str
-    rows: list[StandingRow]
+    rows: list[StandingRow]  # pontos corridos
+    groups: list[GroupTable] = []  # fase de grupos
 
 
 class SnapshotOut(BaseModel):
@@ -130,6 +137,7 @@ class DrawMatch(BaseModel):
     player1: PlayerRef
     player2: PlayerRef
     leg: int
+    group_label: str | None = None
 
 
 class DrawRound(BaseModel):

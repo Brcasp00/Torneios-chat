@@ -49,7 +49,9 @@ Admin não pode rebaixar nem desativar a si mesmo. Admin reseta a senha (não h�
 - **Reporte:** só um dos dois jogadores do confronto reporta; **o admin/organizador valida** (ou rejeita, lança direto, corrige, invalida). Replay do Showdown obrigatório (`https://replay.pokemonshowdown.com/...`) quando `battle_rules.showdown_required` (padrão). Reporte novo substitui o pendente.
 - **Empate:** só se o torneio permitir (`allow_draw`; padrão: liga/grupos sim, mata-mata não). O jogador reporta empate **apenas com placar 0×0**; o admin valida (ou marca `is_draw` num reporte, que vira 0×0).
 - **Mata-mata:** eliminação simples, **sem byes** (nº de jogadores potência de 2 no template; casos diferentes via `custom` com fase preliminar), com disputa de 3º lugar opcional (`group_label="3rd"`, alimentada pelos perdedores das semifinais). **Nunca há empate no mata-mata**, mesmo com `allow_draw`. O vencedor validado avança sozinho para `next_match_id`/`next_slot`; só se pode reportar quando os dois jogadores já estão definidos. **Correção/invalidação em cascata:** mudar o vencedor (ou invalidar) de um confronto exige que o seguinte ainda esteja `scheduled`; se já tiver reporte/resultado a API devolve **409** e não grava nada (invalide de trás para frente). Mudar só Pokémon restantes (mesmo vencedor) é sempre permitido. **Desistência no mata-mata:** o adversário vence por W.O. e avança; se o adversário ainda não foi definido, o W.O. é aplicado automaticamente quando ele chegar ao confronto (`settle_withdrawn`). Se os dois desistirem, o confronto fica para o admin resolver (W.O. manual).
-- **Grupos + mata-mata:** nº de grupos sugerido pelo total de jogadores (~4 por grupo, editável); classificados por grupo configurável; cruzamentos **fixos**; total de vagas no mata-mata potência de 2.
+- **Grupos + mata-mata:** nº de grupos sugerido pelo total de jogadores (~4 por grupo, editável); classificados por grupo configurável; cruzamentos **fixos**; total de vagas no mata-mata potência de 2. Os jogadores são sorteados nos grupos (A, B, C...) e cada grupo joga todos contra todos (turno/returno opcional). Cruzamento padrão (`services/stages.crossing_order`): grupos pareados A-B, C-D...; posição *i* de um grupo enfrenta a posição inversa do outro (1ºA×2ºB, 1ºB×2ºA), com as chaves intercaladas para que companheiros de grupo só se reencontrem tarde (16 jogadores: A1×B2, C1×D2, A2×B1, C2×D1). Pode ser sobrescrito por `config.crossings` na regra (`[["A",1],["B",2],...]` na ordem das vagas).
+- **Motor de regras de passagem (`services/engine.py`):** uma fase só é criada/sorteada quando **todas** as fases de origem das suas regras terminam; os confrontos são gerados sozinhos. Fontes: `ranking` (liga: tabela; grupos: posição no grupo e depois pontos/saldo; round/playoff: vencedores e depois perdedores; mata-mata: campeão, vice, 3º, 4º, demais por rodada de queda), `winners`/`losers` (só fases `round`/`playoff`; vencedores ordenados por **saldo** desc, perdedores pelo menor prejuízo; empate de saldo → `seed` do jogador e depois id), `group_position`. Destinos: `stage` (vagas `to_slot_from`…), `eliminated`, `repechage` (jogadores ficam `eliminated` e a lista vai para `Tournament.config["repechage"][stage_id]` — a Fase 7 usa isso) e `parent_tournament` (Fase 7). Nas fases de destino: `knockout` → vaga = posição no chaveamento (pares adjacentes se enfrentam) ou, com `config.seeding="standard"`, vaga = seed (1×N, 2×(N−1)…); `round`/`playoff` → pares sorteados ou, com `config.pairing="seeded"`, melhor×pior; `league`/`groups` → sorteio com seed derivada (`draw_seed + position*7919`). Jogadores que desistiram e chegam a uma fase nova já viram W.O. na hora.
+- **Mudança em fase de origem depois do destino criado:** se nenhum confronto do destino foi reportado/validado, ele é apagado e refeito (ou desfeito, se a origem foi reaberta — eliminados voltam a `active`); caso contrário a API devolve **409** e não grava nada (invalide de trás para frente). Validação estática do `custom` no cadastro (`templates.validate_custom`): tamanhos de cada fase, vagas contínuas a partir de 1 sem sobreposição, mata-mata potência de 2, round/playoff par, posições existentes, fontes compatíveis com o tipo da fase.
 - **Repescagem/subtorneio:** é um torneio filho (`parent_id`), cadastrado como qualquer torneio, **1 nível apenas** (subtorneio não tem subtorneio). Entrada: automática por regra (ex.: "3º de cada grupo", `repechage_position`) ou manual pelo admin. Pode ter **vários vencedores**, que **voltam ao torneio principal** em vagas configuradas de antemão (`parent_tournament` + `parent_stage` + `to_slot_from`). A página do torneio principal lista os subtorneios (botão de acesso).
 - **Início do torneio** só via `POST /tournaments/{id}/start` e **com exatamente `max_players` inscritos**. Jogador que desiste antes do início é removido da lista.
 - **Histórico:** cada mudança relevante salva um snapshot da tabela (`standings_snapshots`). Admin pode corrigir/invalidar resultados a qualquer momento (irregularidades); tudo é recalculado e registrado em `audit_log`.
@@ -66,10 +68,10 @@ backend/
     models/  user.py tournament.py           # User, AuditLog | Tournament, Stage, AdvancementRule, TournamentPlayer, Match, MatchReport, StandingsSnapshot
     schemas/ user.py tournament.py match.py  # Pydantic
     api/     auth.py users.py tournaments.py play.py matches.py
-    services/ templates.py schedule.py bracket.py standings.py results.py views.py
+    services/ templates.py schedule.py bracket.py stages.py tables.py engine.py standings.py results.py views.py
     scripts/ create_admin.py
   alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py
-  tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py   # SQLite em memória
+  tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py   # SQLite em memória
 ```
 
 - Testes usam **SQLite** (`JsonType` → JSON; `BigIntPK` → INTEGER). Nunca apontam para o banco real.
@@ -85,8 +87,8 @@ backend/
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 4 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata). 56 testes passando. Migrations 0001–0002 aplicadas no Supabase (a Fase 4 não precisou de migration). Back-end implantado no Render.
-**Funciona de ponta a ponta:** formatos `league` e `knockout`. `groups_knockout` e `custom` já podem ser **cadastrados**, mas `/draw` e `/start` retornam 409 ("ainda não implementado") — `SUPPORTED_TEMPLATES` em `app/api/play.py`.
+**Concluído:** Fases 1 a 5 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata e motor genérico de regras de passagem). 64 testes passando. Migrations 0001–0002 aplicadas no Supabase (as Fases 4 e 5 não precisaram de migration). Back-end implantado no Render.
+**Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom` (inclui o cenário dos 20 jogadores, testado também no Supabase real). Pendentes: a **repescagem em si** (entrada automática no subtorneio e retorno dos vencedores ao principal — Fase 7); a lista de candidatos já é gravada em `config.repechage`.
 
 ## Histórico de fases
 
@@ -96,17 +98,17 @@ backend/
 
 - **Fase 4 — Mata-mata:** `services/bracket.py` (chaveamento de eliminação simples sem byes, nomes de rodada, 3º lugar opcional), sorteio por seed com prévia, `seed` do jogador = posição no chaveamento, avanço automático do vencedor e dos perdedores das semifinais, bloqueio de empate, correção/invalidação em cascata com 409 seguro, W.O. por desistência encadeado, `GET /tournaments/{id}/bracket` (rodadas, 3º lugar, campeão), snapshots do chaveamento no histórico, encerramento/reabertura automática do torneio.
 
-## Próxima fase — Fase 5: grupos + mata-mata (e execução de regras de passagem)
+- **Fase 5 — Grupos + mata-mata e motor de regras:** `services/stages.py` (plano e criação de confrontos por tipo de fase: liga, grupos, mata-mata, round, playoff), `services/tables.py` (tabelas por fase/grupo), `services/engine.py` (saídas de cada fase, execução das regras de passagem, refazer/desfazer destinos com bloqueio 409), cruzamento fixo de grupos, standings por grupo (`StageStandings.groups`), `slot` exposto nos confrontos, desistência/W.O. em qualquer tipo de fase, snapshots de grupos e rodadas, validação estática de torneios `custom`, `/draw` e `/start` para todos os formatos.
 
-1. Sorteio dos grupos por seed (tamanhos equilibrados; `TournamentPlayer.group_label`) com prévia; round-robin dentro de cada grupo (reutilizar `schedule.round_robin`, `Match.group_label`).
-2. Tabela por grupo (`/standings` já lista fases `groups`; agrupar por `group_label`), com os mesmos critérios de desempate.
-3. Ao encerrar a fase de grupos, executar as `advancement_rules` (`source="group_position"`): os classificados entram no mata-mata com **cruzamentos fixos** (1º do A × 2º do B etc.) usando `bracket.generate`; 3º lugar de cada grupo → repescagem (Fase 7); demais eliminados (`TournamentPlayer.status="eliminated"`).
-4. Motor genérico de regras de passagem para `custom` (rodada única de pares `round`, ranking dos vencedores por saldo, `playoff`, mata-mata): cenário dos 20 jogadores do usuário como teste de aceitação. Definir como o "ranking" de uma fase `round` é calculado (saldo dos vencedores).
-5. Habilitar `groups_knockout` (e `custom`) em `SUPPORTED_TEMPLATES`; testes de ponta a ponta, desistência no meio dos grupos, correção que muda classificados (cascata/bloqueio quando o mata-mata já começou).
+## Próxima fase — Fase 6: sorteador avançado
+
+1. Sorteio com **potes/seeds**: o admin define o pote (ou seed) de cada jogador; o sorteio distribui um de cada pote por grupo / separa cabeças de chave no chaveamento. Persistir o pote em `TournamentPlayer` (nova coluna via migration — lembrar do RLS/REVOKE se criar tabela) ou em `config`.
+2. **Registro do sorteio** (seed, parâmetros, resultado) e possibilidade de **sortear de novo antes de confirmar**: hoje `/draw` é só prévia e `/start` confirma; falta permitir ajuste manual (trocar dois jogadores de lugar/grupo) antes do `/start` e registrar o sorteio no histórico/auditoria.
+3. Sorteio manual (admin posiciona jogadores) como alternativa ao aleatório, para casos especiais.
+4. Revisitar a pergunta pendente: no `custom`, `seeding` do mata-mata alimentado por regras é `sequential` por padrão (vaga = posição no chaveamento); o usuário pode preferir `standard` como padrão.
 
 ## Roadmap restante
 
-- **Fase 6 — Sorteador avançado:** sorteio por potes/seeds, registro do sorteio, redistribuição manual pelo admin antes de confirmar.
 - **Fase 7 — Subtorneios na prática:** entrada automática por regra (ex.: 3º de cada grupo vai à repescagem) ou manual; retorno dos vencedores às vagas configuradas do torneio principal.
 - **Fase 8 — Histórico e auditoria:** consulta do histórico de tabelas/resultados por torneio, filtros do `audit_log`.
 - **Fase 9 — Front-end básico** (branch `front-end`): login/cadastro, lista de torneios, página do torneio (info + tabela/chaveamento + botão do subtorneio), página do confronto com reporte, painel do admin. Tempo real por polling (ou WebSocket).

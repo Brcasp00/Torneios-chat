@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
-from app.models import Match, MatchReport, Stage, StandingsSnapshot, Tournament, TournamentPlayer, User
-from app.services import standings
+from app.models import Match, MatchReport, Stage, StandingsSnapshot, Tournament, TournamentPlayer
+from app.services import engine, tables
 from app.services.bracket import THIRD_PLACE
 
 REPLAY_RE = re.compile(r"^https://replay\.pokemonshowdown\.com/[A-Za-z0-9._\-/]+$")
@@ -143,8 +143,12 @@ async def propagate(session, stage: Stage, m: Match, old: tuple[int | None, int 
             _place(third, m.slot, new[1])
 
 
-async def settle_withdrawn(session, t: Tournament, stage: Stage) -> None:
-    """No mata-mata, confrontos com um desistente e um adversário ativo viram W.O. (encadeando as próximas rodadas)."""
+async def settle_withdrawn(session, t: Tournament, stage: Stage) -> bool:
+    """Aplica W.O. nos confrontos ainda sem reporte que tenham um desistente e um adversário ativo.
+
+    No mata-mata o vencedor avança (encadeando as próximas rodadas). Se os dois desistiram: nos demais formatos o
+    confronto é anulado; no mata-mata fica para o admin decidir. Retorna True se algo mudou.
+    """
     wo_score = (t.config or {}).get("walkover_score", 3)
     withdrawn = set(
         (
@@ -156,7 +160,8 @@ async def settle_withdrawn(session, t: Tournament, stage: Stage) -> None:
         ).all()
     )
     if not withdrawn:
-        return
+        return False
+    any_change = False
     changed = True
     while changed:
         changed = False
@@ -171,51 +176,43 @@ async def settle_withdrawn(session, t: Tournament, stage: Stage) -> None:
             if not (m.player1_id and m.player2_id):
                 continue
             out1, out2 = m.player1_id in withdrawn, m.player2_id in withdrawn
-            if out1 == out2:  # ninguém desistiu, ou os dois (fica para o admin decidir)
+            if not (out1 or out2):
                 continue
-            old = outcome(m)
-            await reject_pending_reports(session, m.id, None, "Substituído por W.O. (desistência).")
-            set_walkover(m, m.player2_id if out1 else m.player1_id, wo_score)
-            await propagate(session, stage, m, old)
-            changed = True
+            if out1 and out2:
+                if stage.type in KNOCKOUT:
+                    continue
+                m.status = "void"
+            else:
+                old = outcome(m)
+                set_walkover(m, m.player2_id if out1 else m.player1_id, wo_score)
+                await propagate(session, stage, m, old)
+            changed = any_change = True
         await session.flush()
+    return any_change
 
 
 # ---------- tabela / histórico ----------
-async def table_for_stage(session, t: Tournament, stage: Stage) -> list[standings.Row]:
-    prows = await session.execute(
-        select(TournamentPlayer.user_id, User.name, TournamentPlayer.status)
-        .join(User, User.id == TournamentPlayer.user_id)
-        .where(TournamentPlayer.tournament_id == t.id)
-    )
-    players = {uid: (name, st == "withdrawn") for uid, name, st in prows.all()}
-    matches = (
-        await session.scalars(select(Match).where(Match.stage_id == stage.id, Match.status == "validated"))
-    ).all()
-    return standings.compute(players, matches, t.config or {})
-
-
 async def _snapshot_data(session, t: Tournament, stage: Stage) -> dict:
-    if stage.type in KNOCKOUT:
-        ms = (
-            await session.scalars(select(Match).where(Match.stage_id == stage.id).order_by(Match.round, Match.slot))
-        ).all()
-        return {
-            "matches": [
-                {
-                    "id": m.id, "round": m.round, "slot": m.slot, "group_label": m.group_label,
-                    "player1_id": m.player1_id, "player2_id": m.player2_id, "winner_id": m.winner_id,
-                    "status": m.status, "p1_wins": m.p1_wins, "p2_wins": m.p2_wins,
-                }
-                for m in ms
-            ]
-        }
-    rows = await table_for_stage(session, t, stage)
-    return {"rows": [r.as_dict() for r in rows]}
+    if stage.type == "league":
+        return {"rows": [r.as_dict() for r in await tables.table_for_stage(session, t, stage)]}
+    if stage.type == "groups":
+        gt = await tables.group_tables(session, t, stage)
+        return {"groups": {label: [r.as_dict() for r in rows] for label, rows in gt.items()}}
+    ms = await tables.stage_matches(session, stage)
+    return {
+        "matches": [
+            {
+                "id": m.id, "round": m.round, "slot": m.slot, "group_label": m.group_label,
+                "player1_id": m.player1_id, "player2_id": m.player2_id, "winner_id": m.winner_id,
+                "status": m.status, "p1_wins": m.p1_wins, "p2_wins": m.p2_wins,
+            }
+            for m in ms
+        ]
+    }
 
 
 async def recalc(session, t: Tournament, stage: Stage, reason: str, match_id: int | None = None) -> None:
-    """Salva um snapshot (tabela ou chaveamento) e atualiza o estado da fase/torneio."""
+    """Salva um snapshot, atualiza o estado da fase/torneio e aciona as regras de passagem."""
     await session.flush()
     session.add(
         StandingsSnapshot(
@@ -229,7 +226,8 @@ async def recalc(session, t: Tournament, stage: Stage, reason: str, match_id: in
     open_matches = await session.scalar(
         select(func.count()).select_from(Match).where(Match.stage_id == stage.id, Match.status.in_(("scheduled", "reported")))
     )
-    if t.status in ("running", "finished"):
+    total_matches = await session.scalar(select(func.count()).select_from(Match).where(Match.stage_id == stage.id))
+    if t.status in ("running", "finished") and total_matches:
         if open_matches == 0:
             stage.status = "finished"
             later = await session.scalar(
@@ -241,6 +239,26 @@ async def recalc(session, t: Tournament, stage: Stage, reason: str, match_id: in
             stage.status = "running"
             if t.status == "finished":
                 t.status = "running"
+            await _reactivate(session, t, stage)
+        await engine.sync(session, t, stage)
+
+
+async def _reactivate(session, t: Tournament, stage: Stage) -> None:
+    """Fase reaberta (resultado invalidado): quem tinha sido eliminado por ela volta a ficar ativo."""
+    members = tables.participants(await tables.stage_matches(session, stage))
+    if not members:
+        return
+    tps = (
+        await session.scalars(
+            select(TournamentPlayer).where(
+                TournamentPlayer.tournament_id == t.id,
+                TournamentPlayer.user_id.in_(list(members)),
+                TournamentPlayer.status == "eliminated",
+            )
+        )
+    ).all()
+    for tp in tps:
+        tp.status = "active"
 
 
 async def after_change(session, t: Tournament, stage: Stage, m: Match, old: tuple[int | None, int | None], reason: str) -> None:
@@ -255,44 +273,21 @@ async def after_change(session, t: Tournament, stage: Stage, m: Match, old: tupl
 async def apply_withdrawal(session, t: Tournament, user_id: int) -> None:
     """Jogador desistiu com o torneio em andamento.
 
-    Pontos corridos: adversários dos jogos ainda sem reporte vencem por W.O. Mata-mata: o adversário avança
-    (agora, ou quando chegar ao confronto). Reportes pendentes antes da desistência permanecem.
+    Os confrontos ainda sem reporte contra ele viram W.O. para o adversário (no mata-mata o adversário avança, agora ou
+    quando chegar ao confronto). Reportes pendentes antes da desistência permanecem.
     """
-    matches = (
+    stage_ids = (
         await session.scalars(
-            select(Match).where(
+            select(Match.stage_id)
+            .where(
                 Match.tournament_id == t.id,
                 Match.status == "scheduled",
                 (Match.player1_id == user_id) | (Match.player2_id == user_id),
             )
+            .distinct()
         )
     ).all()
-    wo_score = (t.config or {}).get("walkover_score", 3)
-    stages: dict[int, Stage] = {}
-    for m in matches:
-        stage = stages.get(m.stage_id) or await session.get(Stage, m.stage_id)
-        stages[m.stage_id] = stage
-        if stage.type in KNOCKOUT:
-            continue  # tratado por settle_withdrawn
-        opp = m.player2_id if m.player1_id == user_id else m.player1_id
-        opp_out = False
-        if opp is not None:
-            opp_out = (
-                await session.scalar(
-                    select(TournamentPlayer.status).where(
-                        TournamentPlayer.tournament_id == t.id, TournamentPlayer.user_id == opp
-                    )
-                )
-                == "withdrawn"
-            )
-        if opp is None or opp_out:
-            m.status = "void"
-        else:
-            set_walkover(m, opp, wo_score)
-    # Mata-mata: mesmo sem confronto pendente "agora", a fase precisa ser avaliada (o adversário pode chegar depois).
-    for stage in (await session.scalars(select(Stage).where(Stage.tournament_id == t.id, Stage.type.in_(KNOCKOUT)))).all():
-        stages.setdefault(stage.id, stage)
-    for stage in stages.values():
-        if stage.type in KNOCKOUT:
-            await settle_withdrawn(session, t, stage)
-        await recalc(session, t, stage, "Desistência de jogador (W.O. nos jogos pendentes)")
+    for sid in stage_ids:
+        stage = await session.get(Stage, sid)
+        if await settle_withdrawn(session, t, stage):
+            await recalc(session, t, stage, "Desistência de jogador (W.O. nos jogos pendentes)")

@@ -201,7 +201,7 @@ async def test_subtournament(client):
         "name": "Repescagem", "template": "custom", "max_players": 4,
         "stages": [{"name": "Mata-mata", "type": "knockout"}],
         "rules": [{
-            "from_stage": 1, "source": "winners", "pos_from": 1, "pos_to": 2,
+            "from_stage": 1, "source": "ranking", "pos_from": 1, "pos_to": 2,
             "target": "parent_tournament", "parent_stage": 2, "to_slot_from": 5,
         }],
     }

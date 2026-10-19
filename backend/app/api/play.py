@@ -1,4 +1,4 @@
-"""Rotas por torneio: sorteio, início, confrontos, tabela e histórico."""
+"""Rotas por torneio: sorteio, início, confrontos, tabelas, chaveamento e histórico."""
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
@@ -12,6 +12,7 @@ from app.schemas.match import (
     DrawMatch,
     DrawOut,
     DrawRound,
+    GroupTable,
     MatchOut,
     PlayerRef,
     SnapshotDetail,
@@ -19,17 +20,11 @@ from app.schemas.match import (
     StageStandings,
     StandingRow,
 )
-from app.services import bracket, results, schedule
+from app.services import bracket, results, schedule, tables
+from app.services import stages as stage_service
 from app.services.views import matches_out
 
 router = APIRouter(prefix="/tournaments", tags=["play"])
-
-SUPPORTED_TEMPLATES = ("league", "knockout")  # grupos + mata-mata e custom chegam nas próximas fases
-
-
-def _check_supported(t: Tournament) -> None:
-    if t.template not in SUPPORTED_TEMPLATES:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"O formato '{t.template}' ainda não tem sorteio/partidas implementados.")
 
 
 async def _active_players(session, t: Tournament) -> list[tuple[int, str]]:
@@ -42,51 +37,45 @@ async def _active_players(session, t: Tournament) -> list[tuple[int, str]]:
     return [(uid, name) for uid, name in rows.all()]
 
 
-def _plan(t: Tournament, stage: Stage, players: list[tuple[int, str]], seed: int):
-    ids = schedule.shuffled([uid for uid, _ in players], seed)
-    return schedule.round_robin(ids, bool((stage.config or {}).get("double_round")))
+async def _first_stage(session, t: Tournament) -> Stage:
+    stage = await session.scalar(select(Stage).where(Stage.tournament_id == t.id, Stage.position == 1))
+    if not stage:
+        raise HTTPException(status.HTTP_409_CONFLICT, "O torneio não tem fases configuradas.")
+    return stage
+
+
+def _plan_or_409(stage: Stage, ids: list[int], seed: int) -> stage_service.Plan:
+    try:
+        return stage_service.plan_stage(stage, ids, seed, fed=False)
+    except stage_service.StageError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
 
 
 @router.post("/{tournament_id}/draw", response_model=DrawOut)
 async def preview_draw(tournament_id: int, data: DrawIn, user: StaffUser, session: SessionDep):
-    """Sorteador: mostra os confrontos que seriam gerados, sem salvar. Use a mesma `seed` em /start."""
+    """Sorteador: mostra os confrontos da primeira fase que seriam gerados, sem salvar. Use a mesma `seed` em /start."""
     t = await _get_or_404(session, tournament_id)
     _require_manage(user, t)
-    _check_supported(t)
     if t.status not in ("draft", "registration"):
         raise HTTPException(status.HTTP_409_CONFLICT, "O sorteio já foi realizado.")
     players = await _active_players(session, t)
     if len(players) < 2:
         raise HTTPException(status.HTTP_409_CONFLICT, "São necessários ao menos 2 jogadores inscritos.")
-    stage = await session.scalar(select(Stage).where(Stage.tournament_id == t.id, Stage.position == 1))
+    stage = await _first_stage(session, t)
     seed = data.seed or schedule.new_seed()
     names = dict(players)
-    if stage.type == "knockout":
-        slots = schedule.shuffled([uid for uid, _ in players], seed)
-        pairs = bracket.first_round_pairs(slots)
-        return DrawOut(
-            seed=seed,
-            rounds=[
-                DrawRound(
-                    round=1,
-                    matches=[
-                        DrawMatch(player1=PlayerRef(id=a, name=names[a]), player2=PlayerRef(id=b, name=names[b]), leg=1)
-                        for a, b in pairs
-                    ],
-                )
-            ],
-        )
-    rounds = [
-        DrawRound(
-            round=i,
-            matches=[
-                DrawMatch(player1=PlayerRef(id=a, name=names[a]), player2=PlayerRef(id=b, name=names[b]), leg=leg)
-                for a, b, leg in rnd
-            ],
-        )
-        for i, rnd in enumerate(_plan(t, stage, players, seed), start=1)
-    ]
-    return DrawOut(seed=seed, rounds=rounds)
+    plan = _plan_or_409(stage, [uid for uid, _ in players], seed)
+
+    def dm(a, b, leg=1, label=None):
+        return DrawMatch(player1=PlayerRef(id=a, name=names[a]), player2=PlayerRef(id=b, name=names[b]), leg=leg, group_label=label)
+
+    if plan.bracket_slots is not None:
+        pairs = bracket.first_round_pairs(plan.bracket_slots)
+        return DrawOut(seed=seed, rounds=[DrawRound(round=1, matches=[dm(a, b) for a, b in pairs])])
+    by_round: dict[int, list[DrawMatch]] = {}
+    for sp in plan.specs:
+        by_round.setdefault(sp.round, []).append(dm(sp.p1, sp.p2, sp.leg, sp.group_label))
+    return DrawOut(seed=seed, rounds=[DrawRound(round=r, matches=ms) for r, ms in sorted(by_round.items())])
 
 
 @router.post("/{tournament_id}/start", response_model=list[MatchOut])
@@ -94,7 +83,6 @@ async def start_tournament(tournament_id: int, data: DrawIn, user: StaffUser, se
     """Realiza o sorteio, gera os confrontos da primeira fase e coloca o torneio em andamento."""
     t = await _get_or_404(session, tournament_id)
     _require_manage(user, t)
-    _check_supported(t)
     if t.status not in ("draft", "registration"):
         raise HTTPException(status.HTTP_409_CONFLICT, "O torneio já foi iniciado.")
     players = await _active_players(session, t)
@@ -103,32 +91,16 @@ async def start_tournament(tournament_id: int, data: DrawIn, user: StaffUser, se
             status.HTTP_409_CONFLICT,
             f"Para iniciar, o torneio precisa de exatamente {t.max_players} jogadores (há {len(players)}).",
         )
-    stage = await session.scalar(select(Stage).where(Stage.tournament_id == t.id, Stage.position == 1))
+    stage = await _first_stage(session, t)
     seed = data.seed or schedule.new_seed()
-    best_of = (stage.config or {}).get("best_of", 1)
-
-    created: list[Match] = []
-    if stage.type == "knockout":
-        slots = schedule.shuffled([uid for uid, _ in players], seed)
-        if not bracket.is_power_of_two(len(slots)):
-            raise HTTPException(status.HTTP_409_CONFLICT, "O mata-mata sem byes exige número de jogadores potência de 2.")
-        created = await bracket.generate(
-            session, t.id, stage.id, slots, best_of, bool((stage.config or {}).get("third_place"))
-        )
-        for pos, uid in enumerate(slots, start=1):  # posição no chaveamento vira o seed do jogador
+    plan = _plan_or_409(stage, [uid for uid, _ in players], seed)
+    created = await stage_service.materialize(session, t.id, stage, plan)
+    if plan.bracket_slots is not None:
+        for pos, uid in enumerate(plan.bracket_slots, start=1):  # posição no chaveamento vira o seed do jogador
             tp = await session.scalar(
                 select(TournamentPlayer).where(TournamentPlayer.tournament_id == t.id, TournamentPlayer.user_id == uid)
             )
             tp.seed = pos
-    else:
-        for rnd_no, rnd in enumerate(_plan(t, stage, players, seed), start=1):
-            for slot, (a, b, leg) in enumerate(rnd, start=1):
-                m = Match(
-                    tournament_id=t.id, stage_id=stage.id, round=rnd_no, slot=slot, leg=leg,
-                    player1_id=a, player2_id=b, best_of=best_of, status="scheduled",
-                )
-                session.add(m)
-                created.append(m)
     t.status = "running"
     stage.status = "running"
     t.config = {**(t.config or {}), "draw_seed": seed}
@@ -137,7 +109,10 @@ async def start_tournament(tournament_id: int, data: DrawIn, user: StaffUser, se
                  data={"seed": seed, "matches": len(created)})
     )
     await session.flush()
-    await results.recalc(session, t, stage, "Início do torneio")
+    try:
+        await results.recalc(session, t, stage, "Início do torneio")
+    except results.CascadeError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
     await session.commit()
     return await matches_out(session, created)
 
@@ -166,7 +141,7 @@ async def list_matches(
 
 @router.get("/{tournament_id}/standings", response_model=list[StageStandings])
 async def standings_view(tournament_id: int, session: SessionDep):
-    """Tabela de classificação de cada fase de pontos corridos."""
+    """Tabelas de classificação: uma por fase de pontos corridos, ou uma por grupo nas fases de grupos."""
     t = await _get_or_404(session, tournament_id)
     stages = (
         await session.scalars(
@@ -175,13 +150,15 @@ async def standings_view(tournament_id: int, session: SessionDep):
     ).all()
     out = []
     for s in stages:
-        rows = await results.table_for_stage(session, t, s)
-        out.append(
-            StageStandings(
-                stage_id=s.id, stage_name=s.name, stage_type=s.type,
-                rows=[StandingRow(**r.as_dict()) for r in rows],
+        if s.type == "groups":
+            gt = await tables.group_tables(session, t, s)
+            groups = [GroupTable(label=lbl, rows=[StandingRow(**r.as_dict()) for r in rows]) for lbl, rows in gt.items()]
+            out.append(StageStandings(stage_id=s.id, stage_name=s.name, stage_type=s.type, rows=[], groups=groups))
+        else:
+            rows = await tables.table_for_stage(session, t, s)
+            out.append(
+                StageStandings(stage_id=s.id, stage_name=s.name, stage_type=s.type, rows=[StandingRow(**r.as_dict()) for r in rows])
             )
-        )
     return out
 
 

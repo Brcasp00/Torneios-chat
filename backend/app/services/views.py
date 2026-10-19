@@ -30,6 +30,7 @@ async def matches_out(session, matches: list[Match]) -> list[MatchOut]:
             tournament_id=m.tournament_id,
             stage_id=m.stage_id,
             round=m.round,
+            slot=m.slot,
             group_label=m.group_label,
             leg=m.leg,
             best_of=m.best_of,
