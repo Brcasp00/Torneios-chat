@@ -548,8 +548,12 @@ voltar uma versão: Netlify → Deploys → "Publish deploy" de um anterior; Ren
 
 - **`py main.py`** (na raiz do projeto) liga a API (http://localhost:8000) e o site (http://localhost:5173) juntos.
   Opções: `--status`, `--only back|front`, `--open`, `--install`, `--no-reload`. Ctrl+C desliga os dois.
-- **Atenção:** o ambiente local usa o **mesmo banco da produção**. O que você cria, altera ou apaga testando localmente
-  aparece no site real. (Está planejado criar um banco separado para testes.)
+- **Banco de testes:** o ambiente local usa um **projeto separado do Supabase** (o `DATABASE_URL` do `backend/.env`).
+  O que você cria, altera ou apaga testando localmente **não** aparece no site real. A produção usa o banco configurado
+  no Render. Usuários de teste do banco local: `teste1` a `teste16`, senha `12345678`.
+- **Migrations:** rodar `alembic upgrade head` localmente altera só o banco de testes. Na produção, a migration é aplicada
+  pelo Render ao publicar a versão nova. Assim dá para testar a migration antes de ela chegar ao site real.
+- **Nunca** coloque a URL do banco de produção no `backend/.env` (guarde-a num gerenciador de senhas).
 - **Testes automáticos da API:** `cd backend; .\.venv\Scripts\python -m pytest` (usam um banco temporário em memória,
   nunca o real).
 
@@ -572,8 +576,8 @@ Estas coisas a API já faz, mas o site ainda não tem botão:
 - **Sorteio manual** (montar grupos/chave à mão).
 - **Editar um torneio em rascunho** (nome, regras, configuração).
 
-Outras pendências: testes automáticos do site, paginação do registro de alterações, notificações (ex.: Discord), banco
-separado para testes e rotina de backup.
+Outras pendências: testes automáticos do site, paginação do registro de alterações, notificações (ex.: Discord) e
+rotina de backup.
 
 ---
 
