@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api";
+import { api, tokenStore, type Token } from "../api";
 import { useAuth } from "../auth";
 import { PasswordInput, useAction } from "../components/ui";
 import { roleLabel } from "../labels";
@@ -21,9 +21,11 @@ export default function Account() {
       return;
     }
     const ok = await run(async () => {
-      await api("/auth/change-password", { body: { current_password: current, new_password: next } });
+      // A troca encerra as outras sessões e devolve um crachá novo para este aparelho continuar logado.
+      const t = await api<Token>("/auth/change-password", { body: { current_password: current, new_password: next } });
+      if (t?.access_token) tokenStore.set(t.access_token);
       await refresh();
-    }, "Senha alterada.");
+    }, "Senha alterada. Se você estava logado em outros aparelhos, eles foram desconectados.");
     if (ok) {
       setCurrent("");
       setNext("");

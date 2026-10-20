@@ -1,38 +1,32 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type TournamentDetail } from "../api";
+import CustomBuilder, { analyze, initialBuilder, toPayload, type Builder, type ParentStage } from "../components/CustomBuilder";
 import { useAction } from "../components/ui";
+import { useLoad } from "../hooks";
 import { template } from "../labels";
-
-const SAMPLE_MAIN = JSON.stringify(
-  {
-    stages: [
-      { name: "Rodada inicial", type: "round" },
-      { name: "Mata-mata", type: "knockout", config: { seeding: "standard" } },
-    ],
-    rules: [
-      { from_stage: 1, source: "winners", pos_from: 1, pos_to: 4, target: "stage", to_stage: 2, to_slot_from: 1 },
-      { from_stage: 1, source: "losers", pos_from: 1, pos_to: 4, target: "eliminated" },
-    ],
-  },
-  null,
-  2,
-);
-
-const SAMPLE_SUB = JSON.stringify(
-  {
-    stages: [{ name: "Mata-mata da repescagem", type: "knockout" }],
-    rules: [{ from_stage: 1, source: "ranking", pos_from: 1, pos_to: 2, target: "parent_tournament", parent_stage: 2, to_slot_from: 3 }],
-  },
-  null,
-  2,
-);
 
 export default function CreateTournament() {
   const [params] = useSearchParams();
   const parent = params.get("parent");
   const nav = useNavigate();
   const { run, busy, box } = useAction();
+
+  // Subtorneio: as fases do principal (e as vagas que elas reservam) alimentam as opções de "volta ao principal".
+  const parentT = useLoad(() => (parent ? api<TournamentDetail>(`/tournaments/${parent}`) : Promise.resolve(null)), [parent]);
+  const parentStages: ParentStage[] = useMemo(
+    () => (parentT.data?.stages ?? []).map((s) => ({
+      position: s.position,
+      name: s.name,
+      reserved: ((s.config?.external_slots as [number, number][] | undefined) ?? []).map(([a, z]) => [Number(a), Number(z)] as [number, number]),
+    })),
+    [parentT.data],
+  );
+  const [builder, setBuilder] = useState<Builder>(() => initialBuilder(!!parent));
+  // Quando as fases do principal chegam, o exemplo do subtorneio já aponta para as vagas reservadas.
+  useEffect(() => {
+    if (parent && parentStages.length) setBuilder(initialBuilder(true, parentStages));
+  }, [parent, parentStages]);
 
   const [name, setName] = useState("");
   const [tpl, setTpl] = useState(parent ? "custom" : "league");
@@ -45,7 +39,6 @@ export default function CreateTournament() {
   const [qualifiers, setQualifiers] = useState("2");
   const [repPos, setRepPos] = useState("");
   const [repSlots, setRepSlots] = useState("0");
-  const [custom, setCustom] = useState(parent ? SAMPLE_SUB : SAMPLE_MAIN);
 
   const [format, setFormat] = useState("");
   const [game, setGame] = useState("");
@@ -56,6 +49,7 @@ export default function CreateTournament() {
   const [rulesText, setRulesText] = useState("");
 
   const num = (s: string) => (s.trim() === "" ? null : Number(s));
+  const analysis = useMemo(() => analyze(builder, Number(maxPlayers) || 0, !!parent), [builder, maxPlayers, parent]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -82,14 +76,8 @@ export default function CreateTournament() {
         },
       };
       if (tpl === "custom") {
-        let parsed: { stages?: unknown; rules?: unknown };
-        try {
-          parsed = JSON.parse(custom);
-        } catch {
-          throw new Error("O JSON das fases/regras está inválido.");
-        }
-        body.stages = parsed.stages ?? [];
-        body.rules = parsed.rules ?? [];
+        if (analysis.errors.length) throw new Error(`Ajuste a estrutura do torneio antes de criar: ${analysis.errors[0]}`);
+        Object.assign(body, toPayload(builder, Number(bestOf)));
       }
       const t = await api<TournamentDetail>(parent ? `/tournaments/${parent}/subtournaments` : "/tournaments", { body });
       nav(`/torneios/${t.id}`);
@@ -99,7 +87,7 @@ export default function CreateTournament() {
   return (
     <form onSubmit={submit} style={{ maxWidth: 780 }}>
       <h1>{parent ? "Novo subtorneio (repescagem)" : "Novo torneio"}</h1>
-      {parent && <p className="muted">Subtorneio do <Link to={`/torneios/${parent}`}>torneio #{parent}</Link>. Para devolver jogadores ao principal, a fase de destino dele precisa ter vagas reservadas (<code>repechage_slots</code> ou <code>external_slots</code>).</p>}
+      {parent && <p className="muted">Subtorneio do <Link to={`/torneios/${parent}`}>torneio #{parent}</Link>. Para devolver jogadores ao principal, a fase de destino dele precisa ter vagas reservadas para quem volta da repescagem (definidas ao criar o torneio principal).</p>}
       {box}
 
       <div className="card">
@@ -112,10 +100,13 @@ export default function CreateTournament() {
             </select>
           </div>
           <div className="field"><label>Nº de jogadores</label><input type="number" min={2} max={256} value={maxPlayers} onChange={(e) => setMaxPlayers(e.target.value)} required /></div>
-          <div className="field"><label>Melhor de</label>
-            <select value={bestOf} onChange={(e) => setBestOf(e.target.value)}>{[1, 3, 5, 7].map((n) => <option key={n} value={n}>{n}</option>)}</select>
-          </div>
+          {tpl !== "custom" && (
+            <div className="field"><label>Melhor de</label>
+              <select value={bestOf} onChange={(e) => setBestOf(e.target.value)}>{[1, 3, 5, 7].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+            </div>
+          )}
         </div>
+        {tpl === "custom" && <p className="muted small">No personalizado, o "melhor de" e as demais opções são escolhidos em cada fase, logo abaixo.</p>}
         {(tpl === "league" || tpl === "groups_knockout") && (
           <div className="field inline"><input id="dbl" type="checkbox" checked={doubleRound} onChange={(e) => setDoubleRound(e.target.checked)} /><label htmlFor="dbl">Turno e returno</label></div>
         )}
@@ -137,14 +128,14 @@ export default function CreateTournament() {
             <div className="field"><label>Vagas de repescagem no mata-mata</label><input type="number" min={0} value={repSlots} onChange={(e) => setRepSlots(e.target.value)} /></div>
           </div>
         )}
-        {tpl === "custom" && (
-          <div className="field">
-            <label>Fases e regras de passagem (JSON)</label>
-            <textarea style={{ minHeight: 260, fontFamily: "Consolas, monospace", fontSize: ".85rem" }} value={custom} onChange={(e) => setCustom(e.target.value)} spellCheck={false} />
-            <p className="muted small">Cada regra leva as posições <code>pos_from</code>–<code>pos_to</code> de uma fase para outra (<code>stage</code>), para fora (<code>eliminated</code>), para a repescagem (<code>repechage</code>) ou de volta ao principal (<code>parent_tournament</code>). O servidor valida tamanhos e vagas ao salvar.</p>
-          </div>
-        )}
       </div>
+
+      {tpl === "custom" && (
+        <div className="card">
+          <h2>Estrutura do torneio</h2>
+          <CustomBuilder value={builder} onChange={setBuilder} maxPlayers={Number(maxPlayers) || 0} isSub={!!parent} parentStages={parentStages} analysis={analysis} />
+        </div>
+      )}
 
       <div className="card">
         <h2>Regras de batalha</h2>

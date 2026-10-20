@@ -5,10 +5,10 @@
 ## Resumo rápido (leia primeiro)
 
 - **O que é:** plataforma web, em português, para organizar torneios de Pokémon competitivo (Showdown) entre amigos. Público vê tudo; ações exigem login. Dezenas de usuários.
-- **Está no ar:** front **React/Vite no Netlify**, API **FastAPI no Render**, banco **Postgres no Supabase**. As três peças seguem a branch **`main`**. O banco do Supabase é **o mesmo** usado nos testes locais com `py main.py` (cuidado ao criar/apagar dados).
+- **Está no ar:** front **React/Vite no Netlify**, API **FastAPI no Render**, banco **Postgres no Supabase**. As três peças seguem a branch **`main`**. **Bancos separados:** a produção usa o projeto Supabase configurado no Render; o `backend/.env` local aponta para **outro projeto Supabase só de testes** (criado em 2026-10-20). Nunca coloque a URL de produção no `.env`.
 - **Branches:** `main` = produção; `Back-end` = trabalho de `backend/`; `front-end` = trabalho de `frontend/`, `main.py` e docs. Fluxo e armadilhas na seção "Fluxo de trabalho e armadilhas".
 - **Fases 1–9 concluídas**, mais melhorias posteriores (ver "Histórico de fases" e "Estado atual"). A Fase 10 (polimento) está em andamento.
-- **Usuários de teste no banco real:** `teste1`–`teste14` e `testea` (jogadores; `teste5`–`teste14` com senha `123456`, criados só para simular torneios). **Desativar/apagar antes de uso real**, pois a API é pública. O admin é `Arlen`.
+- **Usuários de teste:** no **banco de testes** (local): `teste1`–`teste16`, senha `12345678` (jogadores; o admin local é criado pelo usuário com `create_admin`). No **banco de produção** ainda existem `teste1`–`teste14` e `testea` (`teste5`–`teste14` com senha `123456`): o usuário decidiu **apagá-los** (a interface só desativa; apagar exige script com a URL de produção, que não fica no `.env`). O admin é `Arlen`.
 
 ## Regras de trabalho (obrigatórias)
 
@@ -23,7 +23,7 @@
 9. **Idioma:** conversa, mensagens de erro da API e comentários em português.
 10. **Botões nunca ficam só "desabilitados" sem explicação:** quando uma funcionalidade não pode ser feita (sorteio sem jogadores suficientes, rodada não escolhida, etc.), o botão fica clicável e, ao clicar, mostra o **motivo** (mensagem da API ou verificação prévia no front). Telas que escondem um formulário devem explicar por quê.
 11. **Cláusulas das regras de batalha não são informadas no front:** são definidas automaticamente pelo tier (Smogon/Showdown). O campo foi removido do formulário (a API ainda aceita `battle_rules.clauses`, vazio por padrão).
-12. **Migrations rodam no banco compartilhado:** `alembic upgrade head` local altera o Supabase real (o mesmo da produção). Só aplique migrations aditivas e revisadas; o Render também as aplica no start.
+12. **Migrations:** `alembic upgrade head` local altera só o **banco de testes**; a produção recebe a migration quando o Render publica a versão nova (o start roda `alembic upgrade head`). Teste a migration localmente antes do merge. Mesmo assim, prefira migrations aditivas (a produção tem dados reais). Antes de rodar algo que escreve no banco local, confira que não é a produção (ex.: banco recém-criado/sem dados reais).
 13. **Ações que afetam a produção só quando o usuário pedir:** merge/PR na `main`, deploys, criação/remoção de dados reais. Não dê push na `main`. (O `gh` não está instalado: o PR é aberto pelo usuário em `https://github.com/Brcasp00/Torneios-chat/compare/main...<branch>`.)
 14. **`docs/FUNCIONAMENTO.md`** é o guia, em linguagem simples, de como toda a plataforma funciona (feito a pedido do usuário). Ao mudar uma regra ou funcionalidade, atualize a seção correspondente dele também (fica na branch `front-end`, como os demais documentos).
 
@@ -39,7 +39,7 @@ O usuário organiza, com amigos, torneios de **Pokémon competitivo** (maioria d
 ### Ambiente
 - Windows 11, PowerShell. Python via `py` (3.14). Venv em `backend/.venv` (`cd D:\Projetos\backend; .\.venv\Scripts\Activate.ps1`).
 - `backend/.env`: `DATABASE_URL` (Session/Transaction pooler do Supabase, **porta 6543**, sem colchetes na senha) e `JWT_SECRET`. As migrations trocam automaticamente para a porta **5432**.
-- **Deploy (Render, Web Service):** Root Directory `backend`, Build `pip install -r requirements.txt`, Start `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`, Health Check `/health`. Variáveis no painel do Render: `DATABASE_URL`, `JWT_SECRET` (valor próprio de produção), `CORS_ORIGINS` (URL do front), `PYTHON_VERSION` se necessário. O Render acompanha a branch **`main`** com auto-deploy: a produção só muda após merge na `main`. As migrations rodam no start e alteram o mesmo banco do Supabase usado localmente (cuidado com migrations destrutivas). Plano gratuito: o serviço dorme após ~15 min sem acesso (o primeiro acesso depois disso demora ~1 min; a tarefa de prazos não roda enquanto dorme, por isso a leitura do torneio também verifica prazos).
+- **Deploy (Render, Web Service):** Root Directory `backend`, Build `pip install -r requirements.txt`, Start `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`, Health Check `/health`. Variáveis no painel do Render: `DATABASE_URL`, `JWT_SECRET` (valor próprio de produção), `CORS_ORIGINS` (URL do front), `PYTHON_VERSION` se necessário. O Render acompanha a branch **`main`** com auto-deploy: a produção só muda após merge na `main`. As migrations rodam no start e alteram o banco de produção (cuidado com migrations destrutivas). Plano gratuito: o serviço dorme após ~15 min sem acesso (o primeiro acesso depois disso demora ~1 min; a tarefa de prazos não roda enquanto dorme, por isso a leitura do torneio também verifica prazos).
 - **Deploy do front (Netlify):** projeto importado do mesmo repositório, branch de produção `main`, Base directory `frontend` (o `frontend/netlify.toml` define build `npm run build`, publish `dist`, Node 20 e o redirect de SPA; `frontend/public/_redirects` repete o redirect). Variável do Netlify: `VITE_API_URL` = URL da API no Render (sem barra final; só vale no build, então mudou → novo deploy). No Render, `CORS_ORIGINS` deve conter a URL do Netlify (sem barra final; várias separadas por vírgula, ex. incluindo `http://localhost:5173`). Trocar o nome do site no Netlify muda a URL → atualizar `CORS_ORIGINS`. Branch deploys/Deploy previews são opcionais (cada URL nova também precisa entrar em `CORS_ORIGINS`). Para voltar uma versão: Netlify → Deploys → "Publish deploy" do anterior; Render → redeploy do commit anterior.
 - **Conexão com o banco (importante):** o pooler do Supabase (porta 6543, modo transaction) não aceita prepared statements; `app/db/session.py` desliga o cache do asyncpg **e** o do SQLAlchemy (`prepared_statement_cache_size=0` na URL) e usa nomes únicos. Sem isso aparece `prepared statement "__asyncpg_..." does not exist` de forma intermitente (e o navegador mostra "não foi possível conectar", pois um 500 sem cabeçalho CORS parece falha de rede).
 - Skills Supabase instaladas (`supabase`, `supabase-postgres-best-practices`): consultar antes de mexer em schema/RLS.
@@ -95,7 +95,7 @@ backend/
     api/     auth.py users.py tournaments.py play.py matches.py audit.py
     services/ templates.py schedule.py bracket.py stages.py tables.py engine.py standings.py results.py views.py history.py deadlines.py
     scripts/ create_admin.py
-  alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py  0005_senha_temporaria.py  0006_prazo_das_rodadas.py
+  alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py  0005_senha_temporaria.py  0006_prazo_das_rodadas.py  0007_senha_alterada_em.py
   tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py test_history.py test_audit.py test_deadlines.py   # SQLite em memória
 ```
 
@@ -114,7 +114,7 @@ backend/
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **103 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase (o Render também as aplica sozinho no start).
+**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **105 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase de produção (0007 no banco de testes, vai à produção com o merge) (o Render também as aplica sozinho no start).
 **Em produção:** API no Render e site no Netlify, ambos seguindo a `main` (a `main` contém tudo até o commit "Front: mensagem de falha de conexão mais curta"). A `front-end` e a `Back-end` estão sincronizadas com a `main`, exceto por este documento quando editado.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, repescagem em subtorneio, histórico, adiamento e prazos. O usuário já testou a interface com os usuários de teste e relatou que funciona; ainda falta simular um torneio completo de ponta a ponta (sorteio → jogos → mata-mata → repescagem).
 
@@ -155,7 +155,9 @@ backend/
   - Conexão com o banco com `ssl="require"` (verificado: TLS 1.3); `limit`/`offset` negativos → 422.
   - Cabeçalhos de segurança no `frontend/netlify.toml` (CSP com `connect-src` para `*.onrender.com` e `challenges.cloudflare.com` liberado para o Turnstile, anti-iframe, nosniff, HSTS).
   - **Cadastro público configurável** (commit `030dae5`): `ALLOW_REGISTRATION` (padrão **fechado**), `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET` (Cloudflare Turnstile, `services/captcha.py`); `GET /auth/options` informa o site; `RegisterIn.captcha_token`. Front: `components/Turnstile.tsx` e Login esconde "Criar conta" se fechado. Escolha do usuário: cadastro aberto + Turnstile (variáveis a criar no Render). Testes ligam o cadastro via env no `conftest`.
-  - Avaliados e pendentes (decisão do usuário): revogar tokens ao trocar senha (precisa de migration), cabeçalhos de segurança no Netlify, atualizar Vite/React Router, banco separado para testes + backup.
+  - **Revogação de crachás** (commit `e98d647`, migration **0007** `users.password_changed_at`): o token tem `iat`; `deps` recusa token com `iat` < segundo da última troca (`security.issued_before_password_change`). `POST /auth/change-password` agora devolve **200 + TokenOut** (crachá novo; antes era 204); `reset-password` e `create_admin` também marcam a troca. Front guarda o crachá novo (Account) e, em 401 com token, limpa a sessão (`SESSION_EXPIRED` em `api.ts`/`auth.tsx`). Testes usam relógio falso começando no passado (o PyJWT recusa `iat` no futuro).
+  - Pendentes: backup da produção, apagar os `teste*` da produção, atualizar Vite/React Router.
+- **Editor visual do torneio personalizado** (front, `components/CustomBuilder.tsx`): substitui o JSON na criação. Fases (tipo + opções por tipo: best_of, double_round, groups_count, third_place, seeding, pairing, external_slots) e regras (from/source/posições/target/to_stage/to_slot_from/parent_stage + fixed_crossing) viram o payload em `toPayload`; `analyze` replica `templates.validate_custom` no navegador (paridade conferida em 12 cenários contra o servidor). **Se mudar `validate_custom`, mude `analyze` também.** Subtorneio lê as fases do principal (com `external_slots`) para a regra "torneio principal".
 
 ## Próxima fase — Fase 10: polimento (em andamento)
 
@@ -163,7 +165,7 @@ O deploy já foi feito (Netlify + Render na `main`). Falta/ideias, em ordem suge
 1. **Simular um torneio completo** na produção/local com os usuários `teste*` (grupos + mata-mata + repescagem, adiamento, prazos) e corrigir o que aparecer; depois **desativar/apagar** os usuários e torneios de teste.
 2. Revisar mensagens, estados vazios e o uso em **celular**.
 3. Pendências do front: **testes automatizados** (nenhum ainda), **editar torneio em rascunho** pela interface (a API tem `PATCH /tournaments/{id}`), **sorteio manual** (`arrangement`) pela interface (a API já aceita), paginação do registro de alterações, trocar `window.confirm` por diálogos próprios.
-4. Segurança/operação (continuação da revisão): cabeçalhos de segurança no Netlify, decisão sobre o cadastro público, **banco separado para testes** (novo projeto Supabase) e rotina de backup, revogação de tokens ao trocar senha, atualização de dependências do front.
+4. Segurança/operação (continuação da revisão): cabeçalhos de segurança no Netlify, ~~banco separado para testes~~ (feito: projeto Supabase de testes no `.env` local, migrations 0001–0006 aplicadas, RLS conferido), rotina de backup da produção, apagar os `teste*` da produção, revogação de tokens ao trocar senha, atualização de dependências do front.
 5. Avaliar notificações no Discord.
 
 ## Perguntas em aberto / ideias
@@ -185,7 +187,7 @@ frontend/
 - **Padrões:** `api()` em `api.ts` (token no header, erros viram `ApiError` com a mensagem da API; falha de rede = "Não foi possível conectar ao servidor"); `useLoad(fn, deps, pollMs)` carrega e atualiza por polling sem piscar; `useAction()` executa ações e mostra a mensagem de sucesso/erro (`box`), com `setMsg` para recusas prévias (regra 10); tipos das respostas em `api.ts`; textos/rótulos em `labels.ts` (incluindo `actionLabel` da auditoria); estilos em `styles.css` (variáveis CSS, tema escuro).
 - **Telas-chave:** página do torneio = abas Visão geral · Tabela · Chaveamento · Confrontos · Histórico (Fases encerradas / Rodada a rodada / Registro de alterações) · Gerenciar (status, jogadores/potes, sorteio com prévia, adiar rodada, **prazo das rodadas**, subtorneios). Página do confronto = placar, avisos (prazo, empate automático, adiado), formulário de reporte do jogador, painel do organizador, reportes e linha do tempo.
 - Token JWT em `localStorage` (`torneios.token`); API em `VITE_API_URL` (padrão `http://localhost:8000`; ver `frontend/.env.example`). `frontend/` não é ignorado pelo `.gitignore` (o `frontend/.gitignore` ignora `node_modules`, `dist`, `.env`).
-- Rodar tudo localmente: `py main.py` na raiz (sobe API em :8000 e site em :5173; `--status`, `--only back|front`, `--open`, `--install`, `--no-reload`). Só serve ao desenvolvimento local; Ctrl+C encerra os dois. Usa o `backend/.env` (banco real!).
+- Rodar tudo localmente: `py main.py` na raiz (sobe API em :8000 e site em :5173; `--status`, `--only back|front`, `--open`, `--install`, `--no-reload`). Só serve ao desenvolvimento local; Ctrl+C encerra os dois. Usa o `backend/.env` (banco de testes).
 - Conferir tipos/build: `cd frontend; npm run build`.
 - Deploy: ver a seção "Ambiente" (Netlify + Render).
 
@@ -194,7 +196,7 @@ frontend/
 **Sequência correta para mudanças:**
 1. *Só front:* eu edito na `front-end` → o usuário testa com `py main.py` → o usuário faz o PR/merge `front-end` → `main` → o Netlify refaz o site sozinho (~1–2 min).
 2. *Só back:* eu edito no worktree `D:\Projetos-back` (branch `Back-end`), rodo os testes, commito e dou push → o usuário testa localmente → merge `Back-end` → `main` → o Render refaz o deploy (migrations rodam no start).
-3. *Back e front juntos:* **back-end primeiro** na `main`, front depois, para o site novo nunca chamar rota inexistente na produção. Enquanto o back-end não está na `main`, eu posso copiar os arquivos de `D:\Projetos-back\backend` para `D:\Projetos\backend` **sem commitar** na `front-end` só para o usuário testar (e aplicar a migration no banco compartilhado, se houver).
+3. *Back e front juntos:* **back-end primeiro** na `main`, front depois, para o site novo nunca chamar rota inexistente na produção. Enquanto o back-end não está na `main`, eu posso copiar os arquivos de `D:\Projetos-back\backend` para `D:\Projetos\backend` **sem commitar** na `front-end` só para o usuário testar (e aplicar a migration no banco de testes, se houver).
 4. *Depois de qualquer merge na `main`:* atualizar a branch de trabalho com `git fetch; git merge origin/main` na `front-end` (e `git pull` no worktree da `Back-end`). Antes, descartar cópias locais de back-end (`git checkout -- backend` e apagar arquivos novos não rastreados que a `main` já tem), senão o merge recusa. O **`CLAUDE.md` costuma conflitar** (editado nas duas branches): resolver mantendo as duas versões.
 
 **Armadilhas já encontradas:**
