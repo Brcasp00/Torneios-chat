@@ -27,7 +27,7 @@ Serve para consultar antes de mudar algo, para explicar a alguém como usar, ou 
 18. [As telas do site](#18-as-telas-do-site)
 19. [Segurança: o que protege a plataforma](#19-segurança-o-que-protege-a-plataforma)
 20. [Hospedagem, banco e publicação (deploy)](#20-hospedagem-banco-e-publicação-deploy)
-21. [Desenvolvimento local e branches](#21-desenvolvimento-local-e-branches)
+21. [Desenvolvimento local, branches e backup](#21-desenvolvimento-local-e-branches)
 22. [O que ainda não existe na interface](#22-o-que-ainda-não-existe-na-interface)
 23. [Glossário](#23-glossário)
 
@@ -586,6 +586,30 @@ voltar uma versão: Netlify → Deploys → "Publish deploy" de um anterior; Ren
 Para funcionalidades grandes e novas (ex.: um "acervo"), o recomendado é criar **branches de funcionalidade a partir da
 `main`** no mesmo repositório (ex.: `acervo-back`, `acervo-front`) e fazer o merge quando estiver pronto — não um fork.
 
+### Backup, restauração e limpeza de contas (scripts)
+O plano gratuito do Supabase não oferece um backup que você mesmo restaure, então a plataforma tem scripts próprios.
+Todos rodam no terminal, em `D:\Projetos\backend`. **Sem `--prod`** usam o banco de testes (do `.env`); **com `--prod`**
+pedem a URL do banco de produção, que é colada sem aparecer na tela, vale só naquela execução e não é gravada.
+Todos mostram qual banco estão usando (pelo código do projeto no Supabase) antes de fazer qualquer coisa.
+
+| Para quê | Comando |
+|---|---|
+| **Backup** (só lê; salva um arquivo `.json` em `C:\Users\<você>\Backups-torneios`) | `.\.venv\Scripts\python -m app.scripts.backup --prod` |
+| **Conferir** se um backup é restaurável (faz tudo e desfaz no final) | `.\.venv\Scripts\python -m app.scripts.restore ARQUIVO.json --simular --substituir` |
+| **Restaurar** um backup (pede para digitar RESTAURAR) | `.\.venv\Scripts\python -m app.scripts.restore ARQUIVO.json --prod` (banco vazio) ou `... --substituir` (apaga o que existe antes) |
+| **Apagar contas de vez** (a interface só desativa; pede para digitar APAGAR) | `.\.venv\Scripts\python -m app.scripts.delete_users nome1 nome2 --prod` ou `--padrao "^teste"` |
+
+- O arquivo de backup tem dados pessoais e as impressões (hashes) das senhas: guarde-o num lugar seguro (ex.: uma pasta
+  de nuvem particular) e **nunca** dentro do projeto — o script recusa salvar na pasta do repositório.
+- A restauração exige que o banco esteja com as **mesmas migrations** do backup e acontece numa única transação: se
+  algo falhar, nada muda.
+- `delete_users` mostra antes as contas e os torneios de que elas participam. Se houver torneios, só segue com
+  `--com-torneios` (apagar só as contas deixaria confrontos sem jogador) e avisa quando há participantes de fora da
+  lista. **Admins nunca são apagados.** Faça um backup antes.
+- **Sugestão de rotina:** um backup da produção antes de cada merge com migration e, fora isso, uma vez por semana ou
+  antes/depois de cada torneio. Guarde alguns dos mais recentes.
+- Por que não automático pelo GitHub: o repositório é público, e um backup gerado lá ficaria acessível a outras pessoas.
+
 ---
 
 ## 22. O que ainda não existe na interface
@@ -595,8 +619,7 @@ Estas coisas a API já faz, mas o site ainda não tem botão:
 - **Sorteio manual** (montar grupos/chave à mão).
 - **Editar um torneio em rascunho** (nome, regras, configuração).
 
-Outras pendências: testes automáticos do site, paginação do registro de alterações, notificações (ex.: Discord) e
-rotina de backup.
+Outras pendências: testes automáticos do site, paginação do registro de alterações e notificações (ex.: Discord).
 
 ---
 
