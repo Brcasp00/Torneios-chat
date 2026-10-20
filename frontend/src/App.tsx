@@ -12,7 +12,7 @@ import TournamentPage from "./pages/TournamentPage";
 import Tournaments from "./pages/Tournaments";
 
 function Nav() {
-  const { user, logout, isStaff, isAdmin } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   return (
     <header className="nav">
       <div className="nav-inner">
@@ -22,7 +22,6 @@ function Nav() {
         <nav className="nav-links">
           <NavLink to="/" end>Início</NavLink>
           <NavLink to="/torneios">Torneios</NavLink>
-          {isStaff && <NavLink to="/torneios/novo">Novo torneio</NavLink>}
           {isAdmin && <NavLink to="/admin">Administração</NavLink>}
         </nav>
         <div className="nav-user">
@@ -45,8 +44,9 @@ function RequireAuth({ staff, admin, children }: { staff?: boolean; admin?: bool
   const loc = useLocation();
   if (!ready) return <Loading />;
   if (!user) return <Navigate to="/entrar" state={{ from: loc.pathname + loc.search }} replace />;
-  if ((staff && !isStaff) || (admin && !isAdmin)) {
-    return <div className="alert error">Você não tem permissão para acessar esta página.</div>;
+  if (admin && !isAdmin) return <Navigate to="/" replace />; // a administração não existe para quem não é admin
+  if (staff && !isStaff) {
+    return <div className="alert error">Somente administradores e organizadores podem criar torneios.</div>;
   }
   return children;
 }

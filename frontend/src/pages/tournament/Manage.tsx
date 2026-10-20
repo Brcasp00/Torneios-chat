@@ -120,11 +120,13 @@ function DrawCard({ t, onChanged }: { t: TournamentDetail; onChanged: () => void
   const [seed, setSeed] = useState("");
   const [usePots, setUsePots] = useState(true);
   const [preview, setPreview] = useState<DrawOut | null>(null);
-  const { run, busy, box } = useAction();
+  const { run, busy, box, setMsg } = useAction();
   const body = () => ({ seed: seed ? Number(seed) : undefined, use_pots: usePots });
   const count = t.players.filter((p) => p.status === "active").length;
+  const refuse = (text: string) => setMsg({ kind: "error", text });
 
   const doPreview = async () => {
+    if (count < 2) return refuse(`Não é possível sortear: há ${count} jogador(es) inscrito(s) e são necessários ao menos 2.`);
     await run(async () => {
       const r = await api<DrawOut>(`/tournaments/${t.id}/draw`, { body: body() });
       setPreview(r);
@@ -132,6 +134,12 @@ function DrawCard({ t, onChanged }: { t: TournamentDetail; onChanged: () => void
     });
   };
   const start = async () => {
+    if (t.parent && t.parent.status !== "running")
+      return refuse("Não é possível iniciar o subtorneio: o torneio principal precisa estar em andamento primeiro.");
+    if (count < t.max_players)
+      return refuse(`Não é possível iniciar: faltam ${t.max_players - count} jogador(es). O torneio precisa de exatamente ${t.max_players} inscritos (há ${count}).`);
+    if (count > t.max_players)
+      return refuse(`Não é possível iniciar: há ${count} inscritos e o limite é ${t.max_players}. Remova ${count - t.max_players} jogador(es).`);
     if (!confirm("Iniciar o torneio com este sorteio? Depois disso não dá para mudar os inscritos.")) return;
     if (await run(() => api(`/tournaments/${t.id}/start`, { body: body() }))) onChanged();
   };
@@ -147,8 +155,8 @@ function DrawCard({ t, onChanged }: { t: TournamentDetail; onChanged: () => void
         <div className="field inline" style={{ alignSelf: "end" }}><input id="pots" type="checkbox" checked={usePots} onChange={(e) => setUsePots(e.target.checked)} /><label htmlFor="pots">Usar potes (se definidos)</label></div>
       </div>
       <div className="row">
-        <button className="btn" disabled={busy || count < 2} onClick={doPreview}>Prévia do sorteio</button>
-        <button className="btn primary" disabled={busy || count !== t.max_players} onClick={start}>Sortear e iniciar</button>
+        <button className="btn" disabled={busy} onClick={doPreview}>Prévia do sorteio</button>
+        <button className="btn primary" disabled={busy} onClick={start}>Sortear e iniciar</button>
       </div>
       {preview && (
         <div style={{ marginTop: "1rem" }}>
@@ -176,7 +184,7 @@ function PostponeCard({ t, onChanged }: { t: TournamentDetail; onChanged: () => 
   const [round, setRound] = useState("");
   const [group, setGroup] = useState("");
   const [reason, setReason] = useState("");
-  const { run, busy, box } = useAction();
+  const { run, busy, box, setMsg } = useAction();
   const ms = useLoad(() => api<Match[]>(`/tournaments/${t.id}/matches`, { params: { stage_id: stageId } }), [t.id, stageId]);
   if (stages.length === 0) return null;
   const rounds = [...new Set((ms.data ?? []).map((m) => m.round))].sort((a, b) => a - b);
@@ -184,6 +192,7 @@ function PostponeCard({ t, onChanged }: { t: TournamentDetail; onChanged: () => 
   const pending = (ms.data ?? []).filter((m) => m.postponed && m.status !== "validated");
 
   const act = async (kind: "postpone" | "resume") => {
+    if (!round) return setMsg({ kind: "error", text: "Escolha a rodada que será " + (kind === "postpone" ? "adiada" : "retomada") + " antes de continuar." });
     const ok = await run(
       () => api(`/tournaments/${t.id}/rounds/${kind}`, { body: { stage_id: stageId, round: Number(round), group_label: group || null, reason: reason || null } }),
       kind === "postpone" ? "Rodada adiada." : "Adiamento removido.",
@@ -206,8 +215,8 @@ function PostponeCard({ t, onChanged }: { t: TournamentDetail; onChanged: () => 
         <div className="field"><label>Motivo (opcional)</label><input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} /></div>
       </div>
       <div className="row">
-        <button className="btn primary" disabled={busy || !round} onClick={() => act("postpone")}>Adiar rodada</button>
-        <button className="btn" disabled={busy || !round} onClick={() => act("resume")}>Remover adiamento</button>
+        <button className="btn primary" disabled={busy} onClick={() => act("postpone")}>Adiar rodada</button>
+        <button className="btn" disabled={busy} onClick={() => act("resume")}>Remover adiamento</button>
       </div>
       {pending.length > 0 && (
         <div style={{ marginTop: "1rem" }}>

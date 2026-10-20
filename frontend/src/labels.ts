@@ -56,6 +56,7 @@ export const actionLabel: Record<string, string> = {
   "tournament.withdraw": "Desistência",
   "tournament.set_pots": "Potes definidos",
   "tournament.link_subtournament": "Subtorneio ligado à regra",
+  "user.create": "Usuário criado",
   "user.reset_password": "Senha redefinida",
   "user.set_role": "Papel alterado",
   "user.set_active": "Conta ativada/desativada",

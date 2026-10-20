@@ -21,6 +21,18 @@ export default function MatchPage() {
   const ready = !!(m.player1 && m.player2);
   const winner = decided && m.winner_id ? (m.winner_id === m.player1?.id ? m.player1 : m.player2) : null;
   const bo = m.best_of;
+  // Motivo de o reporte não estar disponível (em vez de simplesmente esconder o formulário).
+  const reportBlocked: string | null = decided || m.status === "void"
+    ? null
+    : !user
+      ? "Entre na sua conta para reportar o resultado deste confronto."
+      : !ready
+        ? "Ainda não dá para reportar: o adversário deste confronto ainda não foi definido."
+        : m.tournament_status !== "running"
+          ? "Ainda não dá para reportar: o torneio não está em andamento."
+          : !m.can_report && !m.can_manage
+            ? "Só os dois jogadores deste confronto podem reportar o resultado."
+            : null;
 
   return (
     <>
@@ -45,10 +57,10 @@ export default function MatchPage() {
         {decided && bo === 1 && !m.is_draw && <p className="center muted">Pokémon restantes: {m.p1_remaining} × {m.p2_remaining}</p>}
         {winner && <p className="center">Vencedor: <strong>{winner.name}</strong></p>}
         {m.postponed && m.postponed_reason && <div className="alert warn">Adiado: {m.postponed_reason}</div>}
-        {!ready && <div className="alert">Aguardando a definição dos jogadores deste confronto.</div>}
         {m.status === "reported" && <div className="alert warn">Há um reporte aguardando validação do organizador.</div>}
       </div>
 
+      {reportBlocked && <div className="alert">{reportBlocked}</div>}
       {m.can_report && ready && !decided && m.tournament_status === "running" && <ReportForm m={m} onDone={refresh} />}
       {m.can_manage && ready && <StaffPanel m={m} onDone={refresh} />}
 
