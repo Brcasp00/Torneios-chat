@@ -54,12 +54,14 @@ def build(data: TournamentCreate) -> tuple[list[StageIn], list[RuleIn], dict]:
     # groups_knockout
     groups = cfg["groups_count"] or default_groups_count(data.max_players)
     cfg["groups_count"] = groups
-    per_group = math.ceil(data.max_players / groups)
+    per_group = math.ceil(data.max_players / groups)  # tamanho do maior grupo
+    smallest = data.max_players // groups  # tamanho do menor grupo (os grupos podem ter tamanhos diferentes)
     q = cfg["qualifiers_per_group"]
     if groups > data.max_players // 2:
         raise TemplateError("Há grupos demais para essa quantidade de jogadores (mínimo 2 por grupo).")
-    if q >= per_group:
-        raise TemplateError("Classificados por grupo deve ser menor que o tamanho do grupo.")
+    if q >= smallest:
+        size = f"{smallest} jogadores" if smallest == per_group else f"de {smallest} a {per_group} jogadores"
+        raise TemplateError(f"Classificados por grupo deve ser menor que o tamanho do menor grupo (os grupos terão {size}).")
     direct = groups * q
     reserved = cfg["repechage_slots"]
     if not is_power_of_two(direct + reserved):
@@ -71,8 +73,10 @@ def build(data: TournamentCreate) -> tuple[list[StageIn], list[RuleIn], dict]:
     if reserved and cfg["repechage_position"] is None:
         raise TemplateError("Vagas de repescagem no mata-mata exigem 'repechage_position' (de onde vêm os candidatos).")
     rep = cfg["repechage_position"]
-    if rep is not None and not (q < rep <= per_group):
-        raise TemplateError("A posição de repescagem deve ser maior que os classificados e caber no grupo.")
+    if rep is not None and not (q < rep <= smallest):
+        raise TemplateError(
+            f"A posição de repescagem deve ser maior que os classificados e existir em todos os grupos (o menor terá {smallest} jogadores)."
+        )
 
     ko_config = {"best_of": cfg["best_of"], "third_place": cfg["third_place"], "seeding": "sequential"}
     if reserved:
@@ -201,8 +205,12 @@ def validate_custom(
             count = r.pos_to - r.pos_from + 1
             if r.source == "group_position":
                 g = _groups_of(stage, size)
-                if r.pos_to > size // g:
-                    raise TemplateError(f"Os grupos da fase {pos} têm no mínimo {size // g} jogadores; a regra pede a posição {r.pos_to}.")
+                # Quem ocupa vagas precisa existir em todos os grupos (o menor); eliminação/repescagem pode citar
+                # posições que só os grupos maiores têm.
+                limit = size // g if r.target in ("stage", "parent_tournament") else -(-size // g)
+                if r.pos_to > limit:
+                    kind = "no mínimo" if limit == size // g else "no máximo"
+                    raise TemplateError(f"Os grupos da fase {pos} têm {kind} {limit} jogadores; a regra pede a posição {r.pos_to}.")
                 if r.config.get("fixed_crossing") and g % 2:
                     raise TemplateError("Cruzamento fixo exige número par de grupos.")
                 count *= g
