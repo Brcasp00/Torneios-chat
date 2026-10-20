@@ -68,6 +68,7 @@ export async function api<T = unknown>(path: string, opts: { method?: string; bo
 export type Role = "admin" | "organizer" | "player";
 export interface User { id: number; name: string; role: Role; is_active: boolean; created_at: string; must_change_password?: boolean }
 export interface Token { access_token: string; user: User }
+export interface AuthOptions { registration_open: boolean; turnstile_site_key: string | null }
 export interface PlayerRef { id: number; name: string }
 
 export interface Stage { id: number; position: number; name: string; type: "round" | "league" | "groups" | "knockout" | "playoff"; config: Record<string, unknown> | null; status: "pending" | "running" | "finished" }

@@ -1,6 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { api, type AuthOptions } from "../api";
 import { useAuth } from "../auth";
+import { useLoad } from "../hooks";
+import Turnstile from "../components/Turnstile";
 import { PasswordInput, useAction } from "../components/ui";
 
 export default function Login() {
@@ -12,18 +15,29 @@ export default function Login() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
-  const { run, busy, box } = useAction();
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [resetCaptcha, setResetCaptcha] = useState(0);
+  const { run, busy, box, setMsg } = useAction();
+  // O servidor diz se o cadastro está aberto e se exige a verificação anti-robô.
+  const options = useLoad(() => api<AuthOptions>("/auth/options"), []);
+  const registrationOpen = options.data?.registration_open ?? false;
+  const siteKey = options.data?.turnstile_site_key ?? null;
 
   if (user) return <Navigate to={from} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (mode === "register" && password !== again) {
-      await run(async () => { throw new Error("As senhas não conferem."); });
+      setMsg({ kind: "error", text: "As senhas não conferem." });
       return;
     }
-    const ok = await run(() => (mode === "login" ? login(name, password) : register(name, password)));
+    if (mode === "register" && siteKey && !captcha) {
+      setMsg({ kind: "error", text: "Conclua a verificação anti-robô (a caixinha acima do botão) antes de cadastrar." });
+      return;
+    }
+    const ok = await run(() => (mode === "login" ? login(name, password) : register(name, password, captcha)));
     if (ok) nav(from, { replace: true });
+    else if (mode === "register" && siteKey) setResetCaptcha((n) => n + 1); // o comprovante só vale uma vez
   };
 
   return (
@@ -49,12 +63,18 @@ export default function Login() {
               <PasswordInput id="pw2" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
             </div>
           )}
+          {mode === "register" && siteKey && <Turnstile siteKey={siteKey} onToken={setCaptcha} resetKey={resetCaptcha} />}
           <div className="row between">
             <button className="btn primary" disabled={busy}>{busy ? "Aguarde…" : mode === "login" ? "Entrar" : "Cadastrar"}</button>
-            <button type="button" className="btn ghost" onClick={() => setMode(mode === "login" ? "register" : "login")}>
-              {mode === "login" ? "Criar conta" : "Já tenho conta"}
-            </button>
+            {(registrationOpen || mode === "register") && (
+              <button type="button" className="btn ghost" onClick={() => { setMode(mode === "login" ? "register" : "login"); setMsg(null); }}>
+                {mode === "login" ? "Criar conta" : "Já tenho conta"}
+              </button>
+            )}
           </div>
+          {!registrationOpen && mode === "login" && options.data && (
+            <p className="muted small" style={{ margin: ".8rem 0 0" }}>Não tem conta? Peça a um admin para criar a sua.</p>
+          )}
         </form>
       </div>
     </div>

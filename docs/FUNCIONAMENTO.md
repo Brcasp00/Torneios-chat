@@ -58,8 +58,32 @@ Pontos importantes:
 
 ### Como alguém ganha uma conta
 - **O admin cria** a conta em Administração → Usuários → "Criar usuário" (escolhe nome, papel e, opcionalmente, a senha).
-- **Cadastro público**: a tela "Entrar / Cadastrar" também permite que qualquer pessoa crie uma conta de jogador.
-  (Está em avaliação fechar ou limitar esse cadastro.)
+- **Cadastro público** (opcional): a tela "Entrar / Cadastrar" pode permitir que qualquer pessoa crie uma conta de
+  jogador. Isso é controlado por variáveis de ambiente no **Render**, sem mexer no código:
+
+  | Configuração no Render | Resultado |
+  |---|---|
+  | `ALLOW_REGISTRATION` ausente ou `false` (padrão) | Cadastro **fechado**: o botão "Criar conta" some e a tela diz para pedir a conta a um admin |
+  | `ALLOW_REGISTRATION=true` | Cadastro **aberto**, sem verificação |
+  | `ALLOW_REGISTRATION=true` + `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET` | Cadastro aberto, mas só passa quem resolver a **verificação anti-robô** da Cloudflare |
+
+  Mudar uma variável no Render reinicia a API e vale em seguida; o site pergunta à API (`GET /auth/options`) como o
+  cadastro está configurado.
+
+### Verificação anti-robô (Cloudflare Turnstile)
+- Na tela de cadastro aparece uma caixinha da Cloudflare. Para a maioria das pessoas ela se resolve sozinha em 1–2
+  segundos; só quem parece suspeito precisa clicar.
+- Ao passar, o site recebe um **comprovante de uso único** e o envia junto com o cadastro. A API pergunta à Cloudflare se
+  o comprovante é válido; sem comprovante válido, a conta não é criada. Robôs que chamam a API direto ficam barrados.
+- Barra robôs, não pessoas: alguém determinado ainda pode criar contas à mão, uma a uma.
+- O login **não** usa a caixinha (ele já tem o bloqueio de 3 tentativas).
+- **Configuração (uma vez):** conta gratuita na Cloudflare → Turnstile → Add widget → em *Hostname*, só o domínio do site
+  (ex.: `nome-do-site.netlify.app`, sem `https://` e sem `/`). A Cloudflare gera a **chave do site** (pública →
+  `TURNSTILE_SITE_KEY`) e a **chave secreta** (→ `TURNSTILE_SECRET`); as duas vão no Render.
+- **Teste local:** no `backend/.env`, use as chaves de teste da Cloudflare, que aprovam sempre e funcionam em qualquer
+  endereço: `TURNSTILE_SITE_KEY=1x00000000000000000000AA` e `TURNSTILE_SECRET=1x0000000000000000000000000000000AA`
+  (mais `ALLOW_REGISTRATION=true`).
+- Se a Cloudflare estiver fora do ar, o cadastro mostra "não foi possível fazer a verificação agora" e pede para tentar de novo.
 - **Nome**: 3 a 32 caracteres (letras, números, espaço, ponto, hífen e `_`). Não pode repetir, sem diferenciar maiúsculas
   ("Ash" e "ash" são o mesmo nome).
 
@@ -470,6 +494,7 @@ apagar), jogadores e potes, sorteio (prévia e "Sortear e iniciar"), adiar rodad
 | Banco com RLS ativo e acesso público revogado | Que alguém leia ou altere o banco pela "porta pública" do Supabase |
 | Conexão com o banco sempre criptografada (TLS) | Que alguém no meio do caminho leia os dados trocados entre a API e o banco |
 | CORS: a API só aceita chamadas de navegador vindas do site oficial | Que outro site use o login de um visitante para agir na plataforma |
+| Cadastro fechado por padrão, ou aberto com verificação anti-robô | Criação de contas em massa por robôs |
 | Cabeçalhos de segurança do site (`frontend/netlify.toml`) | O navegador só roda código do próprio site e só conversa com ele e com a API (CSP); ninguém consegue embutir o site em outra página para enganar cliques; o site é sempre aberto por HTTPS |
 | Segredos fora do Git (`.env` ignorado) | Vazamento de senha do banco e da chave do crachá |
 | Auditoria de todas as ações | Ações sem rastro |
@@ -482,7 +507,7 @@ apagar), jogadores e potes, sorteio (prévia e "Sortear e iniciar"), adiar rodad
 - Nunca cole essa chave nem o conteúdo do `.env` em conversas, prints ou commits.
 
 **Limites conhecidos (a avaliar):** o crachá continua válido por até 12 h depois de uma troca de senha (desativar a
-conta corta na hora); o cadastro público está aberto. Se a API mudar para um endereço fora de `onrender.com`, o novo
+conta corta na hora). Se a API mudar para um endereço fora de `onrender.com`, o novo
 endereço precisa entrar no `connect-src` do `frontend/netlify.toml`, senão o site não consegue falar com ela.
 
 ---
@@ -493,7 +518,8 @@ endereço precisa entrar no `connect-src` do `frontend/netlify.toml`, senão o s
 - **Site → Netlify.** Publica o conteúdo de `frontend/` da branch `main`. A variável `VITE_API_URL` diz ao site onde está
   a API; ela é "embutida" na hora de montar o site, então mudar a variável exige novo deploy.
 - **API → Render** (plano gratuito). Publica `backend/` da branch `main`. Ao iniciar, aplica as migrations do banco e
-  sobe a API. Variáveis: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` (endereço do site).
+  sobe a API. Variáveis: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` (endereço do site) e, para o cadastro público,
+  `ALLOW_REGISTRATION`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET` (seção 2).
   **Dorme** depois de ~15 minutos sem uso; o primeiro acesso depois disso leva cerca de 1 minuto.
 - **Banco → Supabase** (Postgres, plano gratuito).
 

@@ -10,11 +10,12 @@
 # - Content-Security-Policy: o navegador só executa scripts e estilos do próprio site e só conversa com o próprio site
 #   e com a API no Render; um código malicioso injetado não conseguiria carregar nada de fora nem mandar dados para fora.
 #   Se a API mudar de endereço (fora do onrender.com), acrescente o novo endereço em connect-src.
+#   challenges.cloudflare.com = caixinha anti-robô (Turnstile) do cadastro.
 # - frame-ancestors / X-Frame-Options: ninguém consegue embutir o site dentro de outra página (golpe do clique escondido).
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://*.onrender.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://*.onrender.com; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
