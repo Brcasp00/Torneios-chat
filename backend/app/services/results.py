@@ -74,6 +74,7 @@ def set_result(m: Match, p1_wins: int, p2_wins: int, p1_rem: int, p2_rem: int, i
     m.p1_wins, m.p2_wins, m.p1_remaining, m.p2_remaining = p1_wins, p2_wins, p1_rem, p2_rem
     m.is_draw = is_draw
     m.is_walkover = walkover
+    m.auto_result = False
     m.winner_id = None if is_draw else (m.player1_id if p1_wins > p2_wins else m.player2_id)
     m.status = "validated"
     m.validated_at = _now()
@@ -84,6 +85,7 @@ def clear_result(m: Match) -> None:
     m.winner_id = None
     m.is_draw = False
     m.is_walkover = False
+    m.auto_result = False
     m.status = "scheduled"
     m.validated_at = None
 

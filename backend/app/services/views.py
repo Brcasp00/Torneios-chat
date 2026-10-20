@@ -1,7 +1,8 @@
 from sqlalchemy import select
 
-from app.models import Match, MatchReport, User
+from app.models import Match, MatchReport, Stage, User
 from app.schemas.match import MatchOut, PlayerRef
+from app.services import deadlines as dl
 
 
 async def matches_out(session, matches: list[Match]) -> list[MatchOut]:
@@ -23,6 +24,13 @@ async def matches_out(session, matches: list[Match]) -> list[MatchOut]:
 
     def ref(uid):
         return PlayerRef(id=uid, name=names.get(uid, "?")) if uid else None
+
+    stage_ids = {m.stage_id for m in matches}
+    deadlines = {}
+    if stage_ids:
+        for st in (await session.scalars(select(Stage).where(Stage.id.in_(stage_ids)))).all():
+            deadlines[st.id] = dl.parse_deadlines(st.config)
+    at = dl.now()
 
     return [
         MatchOut(
@@ -48,6 +56,10 @@ async def matches_out(session, matches: list[Match]) -> list[MatchOut]:
             has_pending_report=m.id in pending,
             postponed=bool(m.postponed),
             postponed_reason=m.postponed_reason,
+            deadline=deadlines.get(m.stage_id, {}).get(m.round),
+            overdue=dl.is_overdue(m, deadlines.get(m.stage_id, {}), at),
+            auto_result=bool(m.auto_result),
+            deadline_waived=bool(m.deadline_waived),
         )
         for m in matches
     ]

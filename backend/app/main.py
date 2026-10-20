@@ -1,10 +1,30 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import audit, auth, matches, play, tournaments, users
 from app.core.config import get_settings
+from app.db.session import SessionLocal
+from app.services import deadlines
 
-app = FastAPI(title="Plataforma de Torneios Pokémon", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Verifica os prazos das rodadas a cada minuto (a leitura do torneio também verifica, caso o servidor tenha dormido).
+    task = asyncio.create_task(deadlines.run_forever(SessionLocal, every_seconds=60))
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="Plataforma de Torneios Pokémon", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

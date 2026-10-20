@@ -134,6 +134,9 @@ class Match(Base, TimestampMixin):
     postponed_reason: Mapped[str | None] = mapped_column(Text)
     postponed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     postponed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Prazo da rodada: empate automático (auto_result) e liberação do prazo pelo admin (deadline_waived).
+    auto_result: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    deadline_waived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class MatchReport(Base, TimestampMixin):
