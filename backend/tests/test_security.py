@@ -3,8 +3,43 @@ import pytest
 from pydantic import ValidationError
 
 from app.core import login_guard
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
+from app.services import captcha
 from tests.test_auth_users import auth, login, register
+
+
+async def test_registration_can_be_closed(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "allow_registration", False)
+    assert (await client.get("/auth/options")).json() == {"registration_open": False, "turnstile_site_key": None}
+    r = await register(client)
+    assert r.status_code == 403 and "fechado" in r.json()["detail"]
+    # o admin continua criando contas
+    adm = (await login(client, "Admin", "admin123")).json()["access_token"]
+    assert (await client.post("/users", json={"name": "Criado"}, headers=auth(adm))).status_code == 201
+
+
+async def test_registration_with_turnstile(client, monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "turnstile_site_key", "chave-publica")
+    monkeypatch.setattr(s, "turnstile_secret", "chave-secreta")
+    seen = []
+
+    async def fake_verify(token):
+        seen.append(token)
+        if token == "fora-do-ar":
+            raise captcha.CaptchaUnavailable
+        return token == "valido"
+
+    monkeypatch.setattr(captcha, "verify", fake_verify)
+    assert (await client.get("/auth/options")).json() == {"registration_open": True, "turnstile_site_key": "chave-publica"}
+    body = {"name": "Robo", "password": "senha1234"}
+    assert (await client.post("/auth/register", json=body)).status_code == 400  # sem comprovante
+    assert (await client.post("/auth/register", json={**body, "captcha_token": "falso"})).status_code == 400
+    assert (await client.post("/auth/register", json={**body, "captcha_token": "fora-do-ar"})).status_code == 503
+    assert (await client.post("/auth/register", json={**body, "captcha_token": "valido"})).status_code == 201
+    assert seen == ["falso", "fora-do-ar", "valido"]
+    # login não exige a verificação
+    assert (await login(client, "Robo", "senha1234")).status_code == 200
 
 
 async def test_three_wrong_passwords_lock_the_account(client, monkeypatch):

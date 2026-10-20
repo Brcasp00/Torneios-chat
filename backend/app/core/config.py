@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 60 * 12
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    # Cadastro público (/auth/register). Fechado por padrão: só o admin cria contas.
+    allow_registration: bool = False
+    # Cloudflare Turnstile (verificação anti-robô no cadastro). Com as duas chaves, o cadastro exige a verificação.
+    turnstile_site_key: str = ""  # pública: o site a usa para mostrar a caixinha
+    turnstile_secret: str = ""  # secreta: só a API a usa para conferir o comprovante
+
+    @property
+    def turnstile_enabled(self) -> bool:
+        return bool(self.turnstile_site_key.strip() and self.turnstile_secret.strip())
 
     @field_validator("jwt_secret")
     @classmethod
