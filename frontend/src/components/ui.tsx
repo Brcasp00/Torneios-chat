@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { Match, StandingRow } from "../api";
 import { matchStatus, scoreText } from "../labels";
@@ -120,5 +120,25 @@ export function BracketMatch({ m }: { m: Match }) {
       {line(m.player1, m.p1_wins)}
       {line(m.player2, m.p2_wins)}
     </Link>
+  );
+}
+
+/** Campo de senha com botão para mostrar/ocultar o que foi digitado. */
+export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <input {...props} type={show ? "text" : "password"} style={{ ...props.style, paddingRight: "5.2rem" }} />
+      <button
+        type="button"
+        className="btn small ghost"
+        style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)" }}
+        aria-pressed={show}
+        aria-label={show ? "Ocultar senha" : "Mostrar senha"}
+        onClick={() => setShow(!show)}
+      >
+        {show ? "Ocultar" : "Mostrar"}
+      </button>
+    </div>
   );
 }

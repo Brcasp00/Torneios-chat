@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
-import { useAction } from "../components/ui";
+import { PasswordInput, useAction } from "../components/ui";
 
 export default function Login() {
   const { user, login, register } = useAuth();
@@ -41,12 +41,12 @@ export default function Login() {
           </div>
           <div className="field">
             <label htmlFor="pw">Senha</label>
-            <input id="pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={mode === "register" ? 6 : 1} />
+            <PasswordInput id="pw" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={mode === "register" ? 6 : 1} />
           </div>
           {mode === "register" && (
             <div className="field">
               <label htmlFor="pw2">Repita a senha</label>
-              <input id="pw2" type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
+              <PasswordInput id="pw2" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
             </div>
           )}
           <div className="row between">

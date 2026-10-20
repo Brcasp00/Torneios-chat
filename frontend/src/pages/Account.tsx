@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { useAction } from "../components/ui";
+import { PasswordInput, useAction } from "../components/ui";
 import { roleLabel } from "../labels";
 
 export default function Account() {
@@ -54,15 +54,15 @@ export default function Account() {
         {box}
         <div className="field">
           <label htmlFor="cur">{forced ? "Senha atual (a temporária)" : "Senha atual"}</label>
-          <input id="cur" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+          <PasswordInput id="cur" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
         </div>
         <div className="field">
           <label htmlFor="new">Nova senha (mínimo 6 caracteres, diferente da atual)</label>
-          <input id="new" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required minLength={6} />
+          <PasswordInput id="new" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required minLength={6} />
         </div>
         <div className="field">
           <label htmlFor="again">Repita a nova senha</label>
-          <input id="again" type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
+          <PasswordInput id="again" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" required />
         </div>
         <div className="row">
           <button className="btn primary" disabled={busy}>Salvar</button>
