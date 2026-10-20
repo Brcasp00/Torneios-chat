@@ -6,6 +6,21 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# Cabeçalhos de segurança (valem para todas as páginas do site publicado).
+# - Content-Security-Policy: o navegador só executa scripts e estilos do próprio site e só conversa com o próprio site
+#   e com a API no Render; um código malicioso injetado não conseguiria carregar nada de fora nem mandar dados para fora.
+#   Se a API mudar de endereço (fora do onrender.com), acrescente o novo endereço em connect-src.
+# - frame-ancestors / X-Frame-Options: ninguém consegue embutir o site dentro de outra página (golpe do clique escondido).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://*.onrender.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Strict-Transport-Security = "max-age=31536000"
+
 # App de página única: qualquer endereço (ex.: /torneios/3) deve abrir o index.html, senão atualizar a página dá 404.
 [[redirects]]
   from = "/*"

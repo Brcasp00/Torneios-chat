@@ -470,6 +470,7 @@ apagar), jogadores e potes, sorteio (prévia e "Sortear e iniciar"), adiar rodad
 | Banco com RLS ativo e acesso público revogado | Que alguém leia ou altere o banco pela "porta pública" do Supabase |
 | Conexão com o banco sempre criptografada (TLS) | Que alguém no meio do caminho leia os dados trocados entre a API e o banco |
 | CORS: a API só aceita chamadas de navegador vindas do site oficial | Que outro site use o login de um visitante para agir na plataforma |
+| Cabeçalhos de segurança do site (`frontend/netlify.toml`) | O navegador só roda código do próprio site e só conversa com ele e com a API (CSP); ninguém consegue embutir o site em outra página para enganar cliques; o site é sempre aberto por HTTPS |
 | Segredos fora do Git (`.env` ignorado) | Vazamento de senha do banco e da chave do crachá |
 | Auditoria de todas as ações | Ações sem rastro |
 
@@ -481,7 +482,8 @@ apagar), jogadores e potes, sorteio (prévia e "Sortear e iniciar"), adiar rodad
 - Nunca cole essa chave nem o conteúdo do `.env` em conversas, prints ou commits.
 
 **Limites conhecidos (a avaliar):** o crachá continua válido por até 12 h depois de uma troca de senha (desativar a
-conta corta na hora); o cadastro público está aberto; o site ainda não envia cabeçalhos extras de segurança.
+conta corta na hora); o cadastro público está aberto. Se a API mudar para um endereço fora de `onrender.com`, o novo
+endereço precisa entrar no `connect-src` do `frontend/netlify.toml`, senão o site não consegue falar com ela.
 
 ---
 
