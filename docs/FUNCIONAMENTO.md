@@ -93,6 +93,10 @@ no navegador e o apresenta a cada ação. Depois de 12 horas é preciso entrar d
 - O crachá é assinado com uma chave secreta (`JWT_SECRET`) que só a API conhece. Sem ela, ninguém consegue fabricar um crachá.
 - O papel (admin, organizador, jogador) e se a conta está ativa são **lidos do banco a cada ação**: desativar alguém ou
   mudar o papel vale na hora, mesmo que a pessoa ainda tenha um crachá válido.
+- **Trocar ou redefinir a senha desconecta as outras sessões:** todo crachá emitido antes da troca deixa de valer. Quem
+  trocou a própria senha continua logado no aparelho onde trocou (recebe um crachá novo); os outros aparelhos voltam a
+  aparecer como visitante, com o aviso "Sua sessão terminou". Quando o admin redefine a senha de alguém, todos os
+  aparelhos dessa pessoa saem — útil se a senha vazou.
 
 ### Bloqueio por tentativas erradas
 - **3 senhas erradas seguidas** para o mesmo nome bloqueiam o login daquela conta por **10 minutos** (até a senha certa é
@@ -183,7 +187,7 @@ Os modelos prontos montam isso sozinhos:
 | **Pontos corridos (liga)** | Todos contra todos (turno, ou turno e returno). Vence quem fizer mais pontos |
 | **Mata-mata** | Eliminação simples: quem perde sai. Número de jogadores precisa ser potência de 2 (4, 8, 16, 32...) |
 | **Grupos + mata-mata** | Jogadores sorteados em grupos (A, B, C...), todos contra todos dentro do grupo; os melhores de cada grupo vão para o mata-mata com cruzamento fixo |
-| **Personalizado (custom)** | Qualquer combinação de fases e regras, descrita em JSON na tela de criação |
+| **Personalizado (custom)** | Qualquer combinação de fases e regras, montada no editor visual da tela de criação (seção 11) |
 
 ### Tipos de fase (usados no personalizado)
 | Tipo | O que é |
@@ -338,8 +342,23 @@ seguinte já teve jogo reportado, a API recusa (409): invalide de trás para fre
 **Exemplo (personalizado):** 20 jogadores fazem uma rodada única de 10 confrontos; os 6 melhores vencedores (por saldo)
 vão direto ao mata-mata de 8; os 4 piores perdedores jogam um playoff; os 2 vencedores do playoff completam as 8 vagas.
 
-Ao criar um torneio personalizado, a API confere se a estrutura faz sentido (tamanhos de cada fase, vagas sem buraco e
-sem sobreposição, mata-mata em potência de 2, etc.) e explica o erro se não fizer.
+### O editor do torneio personalizado
+Na tela "Novo torneio", com o modelo **Personalizado**, aparece o bloco **Estrutura do torneio** (sem JSON na tela):
+- **Fases:** cada fase tem nome, tipo e só as opções que fazem sentido para aquele tipo — "melhor de", turno e returno
+  (liga/grupos), número de grupos (vazio = automático), disputa de 3º lugar e montagem da chave (mata-mata: automática,
+  1º × último, ou na ordem das vagas), pares sorteados ou melhor × pior (rodada única/playoff a partir da 2ª fase) e
+  **vagas reservadas para quem volta da repescagem**. Dá para reordenar (↑ ↓) e remover fases. Ao lado do número da fase
+  aparece quantos jogadores ela vai receber.
+- **Regras de passagem:** cada regra é uma linha "Da fase X · quem · da posição A até B · vão para (outra fase /
+  eliminados / repescagem / torneio principal) · a partir da vaga N". As opções de "quem" mudam conforme o tipo da fase
+  (ex.: "posição em cada grupo" só aparece em fase de grupos). Abaixo de cada regra aparece a frase do que ela faz, por
+  exemplo: *"Da fase 1: do 1º ao 2º de cada grupo (8 jogadores) vão para a fase 2 ("Mata-mata"), vagas 1 a 8."*
+  Grupos que alimentam um mata-mata podem usar o **cruzamento fixo** (1ºA × 2ºB...).
+- **Verificação:** o editor confere a estrutura enquanto você monta (mesmas regras do servidor: tamanhos de cada fase,
+  vagas sem buraco e sem sobreposição, mata-mata em potência de 2, número par em rodada única/playoff, etc.) e lista o
+  que precisa ajustar. Com algum problema, o botão "Criar torneio" explica o motivo em vez de enviar.
+- **Subtorneio (repescagem):** a regra "torneio principal" lista as fases do principal com as vagas que cada uma reservou.
+- Ao criar, a API confere tudo de novo e explica o erro se algo não fizer sentido.
 
 ---
 
@@ -455,7 +474,7 @@ A aba **Histórico** tem três partes:
 | Início | `/` | Torneios em andamento, com inscrições abertas e encerrados recentemente; "Seus jogos pendentes" para quem está logado |
 | Entrar / Cadastrar | `/entrar` | Login e cadastro |
 | Torneios | `/torneios` | Lista de torneios; botão **"Novo torneio"** (admin/organizador) |
-| Novo torneio | `/torneios/novo` | Criação com modelo pronto ou personalizado (JSON). Com `?parent=ID`, cria um subtorneio |
+| Novo torneio | `/torneios/novo` | Criação com modelo pronto ou personalizado (editor visual de fases e regras). Com `?parent=ID`, cria um subtorneio |
 | Torneio | `/torneios/:id` | Abas: **Visão geral**, **Tabela**, **Chaveamento**, **Confrontos**, **Histórico** e **Gerenciar** (só admin/organizador do torneio) |
 | Confronto | `/matches/:id` | Placar, avisos (prazo, empate automático, adiado), formulário de reporte, painel do organizador, reportes e linha do tempo |
 | Minha conta | `/conta` | Dados da conta e troca de senha |
@@ -485,6 +504,7 @@ apagar), jogadores e potes, sorteio (prévia e "Sortear e iniciar"), adiar rodad
 | Bloqueio de 3 tentativas por 10 min | Adivinhar senhas testando várias seguidas |
 | Senha mínima de 8 caracteres | Senhas fáceis demais |
 | Senha temporária com troca obrigatória | Que a senha que o admin viu continue valendo |
+| Troca/redefinição de senha invalida crachás antigos | Que alguém que descobriu a senha continue logado depois da troca |
 | Crachá (token) assinado com `JWT_SECRET` | Que alguém finja ser outra pessoa ou se passe por admin |
 | API recusa iniciar sem `JWT_SECRET` forte | Que um esquecimento na configuração deixe a chave padrão (pública) em uso |
 | Permissões conferidas na API a cada ação | Que alguém faça pelo "lado de fora" o que o site não deixa |
@@ -506,9 +526,8 @@ apagar), jogadores e potes, sorteio (prévia e "Sortear e iniciar"), adiar rodad
 - **Trocar a chave desconecta todo mundo** (todos precisam entrar de novo) — útil se suspeitar de vazamento.
 - Nunca cole essa chave nem o conteúdo do `.env` em conversas, prints ou commits.
 
-**Limites conhecidos (a avaliar):** o crachá continua válido por até 12 h depois de uma troca de senha (desativar a
-conta corta na hora). Se a API mudar para um endereço fora de `onrender.com`, o novo
-endereço precisa entrar no `connect-src` do `frontend/netlify.toml`, senão o site não consegue falar com ela.
+**Atenção:** se a API mudar para um endereço fora de `onrender.com`, o novo endereço precisa entrar no `connect-src` do
+`frontend/netlify.toml`, senão o site não consegue falar com ela.
 
 ---
 

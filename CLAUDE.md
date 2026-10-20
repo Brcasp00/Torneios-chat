@@ -95,7 +95,7 @@ backend/
     api/     auth.py users.py tournaments.py play.py matches.py audit.py
     services/ templates.py schedule.py bracket.py stages.py tables.py engine.py standings.py results.py views.py history.py deadlines.py
     scripts/ create_admin.py
-  alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py  0005_senha_temporaria.py  0006_prazo_das_rodadas.py
+  alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py  0005_senha_temporaria.py  0006_prazo_das_rodadas.py  0007_senha_alterada_em.py
   tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py test_history.py test_audit.py test_deadlines.py   # SQLite em memória
 ```
 
@@ -114,7 +114,7 @@ backend/
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **103 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase (o Render também as aplica sozinho no start).
+**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **105 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase de produção (0007 no banco de testes, vai à produção com o merge) (o Render também as aplica sozinho no start).
 **Em produção:** API no Render e site no Netlify, ambos seguindo a `main` (a `main` contém tudo até o commit "Front: mensagem de falha de conexão mais curta"). A `front-end` e a `Back-end` estão sincronizadas com a `main`, exceto por este documento quando editado.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, repescagem em subtorneio, histórico, adiamento e prazos. O usuário já testou a interface com os usuários de teste e relatou que funciona; ainda falta simular um torneio completo de ponta a ponta (sorteio → jogos → mata-mata → repescagem).
 
@@ -155,7 +155,9 @@ backend/
   - Conexão com o banco com `ssl="require"` (verificado: TLS 1.3); `limit`/`offset` negativos → 422.
   - Cabeçalhos de segurança no `frontend/netlify.toml` (CSP com `connect-src` para `*.onrender.com` e `challenges.cloudflare.com` liberado para o Turnstile, anti-iframe, nosniff, HSTS).
   - **Cadastro público configurável** (commit `030dae5`): `ALLOW_REGISTRATION` (padrão **fechado**), `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET` (Cloudflare Turnstile, `services/captcha.py`); `GET /auth/options` informa o site; `RegisterIn.captcha_token`. Front: `components/Turnstile.tsx` e Login esconde "Criar conta" se fechado. Escolha do usuário: cadastro aberto + Turnstile (variáveis a criar no Render). Testes ligam o cadastro via env no `conftest`.
-  - Avaliados e pendentes (decisão do usuário): revogar tokens ao trocar senha (precisa de migration), cabeçalhos de segurança no Netlify, atualizar Vite/React Router, banco separado para testes + backup.
+  - **Revogação de crachás** (commit `e98d647`, migration **0007** `users.password_changed_at`): o token tem `iat`; `deps` recusa token com `iat` < segundo da última troca (`security.issued_before_password_change`). `POST /auth/change-password` agora devolve **200 + TokenOut** (crachá novo; antes era 204); `reset-password` e `create_admin` também marcam a troca. Front guarda o crachá novo (Account) e, em 401 com token, limpa a sessão (`SESSION_EXPIRED` em `api.ts`/`auth.tsx`). Testes usam relógio falso começando no passado (o PyJWT recusa `iat` no futuro).
+  - Pendentes: backup da produção, apagar os `teste*` da produção, atualizar Vite/React Router.
+- **Editor visual do torneio personalizado** (front, `components/CustomBuilder.tsx`): substitui o JSON na criação. Fases (tipo + opções por tipo: best_of, double_round, groups_count, third_place, seeding, pairing, external_slots) e regras (from/source/posições/target/to_stage/to_slot_from/parent_stage + fixed_crossing) viram o payload em `toPayload`; `analyze` replica `templates.validate_custom` no navegador (paridade conferida em 12 cenários contra o servidor). **Se mudar `validate_custom`, mude `analyze` também.** Subtorneio lê as fases do principal (com `external_slots`) para a regra "torneio principal".
 
 ## Próxima fase — Fase 10: polimento (em andamento)
 
