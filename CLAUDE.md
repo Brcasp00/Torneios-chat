@@ -78,7 +78,7 @@ backend/
     services/ templates.py schedule.py bracket.py stages.py tables.py engine.py standings.py results.py views.py
     scripts/ create_admin.py
   alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py
-  tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py test_history.py   # SQLite em memória
+  tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py test_history.py test_audit.py   # SQLite em memória
 ```
 
 - Testes usam **SQLite** (`JsonType` → JSON; `BigIntPK` → INTEGER). Nunca apontam para o banco real.
@@ -94,7 +94,7 @@ backend/
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 8 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento). 86 testes passando. Migrations 0001–0003 aplicadas no Supabase; a **0004** (colunas novas em `matches` e `standings_snapshots`) é aplicada pelo Render no próximo start. Back-end implantado no Render.
+**Concluído:** Fases 1 a 8 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento). 88 testes passando. Migrations 0001–0003 aplicadas no Supabase; a **0004** (colunas novas em `matches` e `standings_snapshots`) é aplicada pelo Render no próximo start. Back-end implantado no Render.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, e repescagem em subtorneio (entrada automática dos candidatos e retorno ao mata-mata principal).
 
 ## Histórico de fases
@@ -115,7 +115,7 @@ backend/
 
 ## Próxima fase — Fase 9: front-end básico (branch `front-end`)
 
-Ver o roadmap abaixo; antes de começar, discutir o design com o usuário. Pendente do antigo escopo da Fase 8 (a fazer quando convier): consulta do `audit_log` por admin com filtros (ator, ação, entidade, período) e paginação, e linha do tempo de um confronto (reportes, rejeições, correções).
+Ver o roadmap abaixo; antes de começar, discutir o design com o usuário. Auditoria (concluída junto da Fase 8): `GET /audit` (admin; filtros actor_id, action exata ou prefixo "match.", entity, entity_id, since, until; limit/offset; devolve total+items) e `GET /matches/{id}/timeline` (público: reportes, revisões e ações do admin em ordem).
 
 ## Roadmap restante
 
