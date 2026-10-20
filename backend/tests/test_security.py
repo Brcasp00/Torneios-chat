@@ -51,6 +51,55 @@ async def test_unknown_names_are_locked_too_and_admin_reset_unlocks(client):
     assert (await login(client, "Ash", "nova12345")).status_code == 200
 
 
+async def _with_db(fn):
+    """Roda `fn(session)` numa sessão própria do banco de teste, fechada logo em seguida."""
+    from app.db.session import get_session
+    from app.main import app
+
+    async for s in app.dependency_overrides[get_session]():
+        return await fn(s)
+
+
+async def test_old_short_password_must_be_changed_and_hash_is_upgraded(client):
+    from argon2 import PasswordHasher
+    from sqlalchemy import select
+
+    from app.core.security import needs_rehash
+    from app.models import User
+
+    old_hash = PasswordHasher().hash("123456")  # parâmetros antigos (64 MiB) e senha abaixo do mínimo atual
+    assert needs_rehash(old_hash)
+
+    async def insert(s):
+        s.add(User(name="Antigo", password_hash=old_hash, role="player"))
+        await s.commit()
+
+    async def stored_hash(s):
+        return (await s.scalars(select(User).where(User.name == "Antigo"))).one().password_hash
+
+    await _with_db(insert)
+
+    r = await login(client, "Antigo", "123456")
+    assert r.status_code == 200 and r.json()["user"]["must_change_password"] is True
+    tok = r.json()["access_token"]
+    r = await client.post("/tournaments/1/withdraw", headers=auth(tok))
+    assert r.status_code == 403 and "8 caracteres" in r.json()["detail"]
+    stored = await _with_db(stored_hash)
+    assert stored != old_hash and not needs_rehash(stored)
+
+    # a senha nova também precisa ter 8+; depois disso a conta volta ao normal
+    body = {"current_password": "123456", "new_password": "1234567"}
+    assert (await client.post("/auth/change-password", json=body, headers=auth(tok))).status_code == 422
+    body["new_password"] = "senhaforte1"
+    assert (await client.post("/auth/change-password", json=body, headers=auth(tok))).status_code == 204
+    assert (await login(client, "Antigo", "senhaforte1")).json()["user"]["must_change_password"] is False
+
+
+async def test_new_passwords_need_eight_characters(client):
+    assert (await register(client, "Curta", "1234567")).status_code == 422
+    assert (await register(client, "Longa", "12345678")).status_code == 201
+
+
 def test_jwt_secret_must_be_strong():
     for bad in ("troque-esta-chave-em-producao", "curta", ""):
         with pytest.raises(ValidationError):

@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.core.security import MIN_PASSWORD_LENGTH
+
 _NAME_RE = re.compile(r"^[\w .\-]{3,32}$", re.UNICODE)
 
 Role = Literal["admin", "organizer", "player"]
@@ -17,8 +19,8 @@ def _clean_name(v: str) -> str:
 
 
 def _check_password(v: str) -> str:
-    if len(v) < 6 or len(v) > 128:
-        raise ValueError("A senha deve ter de 6 a 128 caracteres.")
+    if len(v) < MIN_PASSWORD_LENGTH or len(v) > 128:
+        raise ValueError(f"A senha deve ter de {MIN_PASSWORD_LENGTH} a 128 caracteres.")
     return v
 
 

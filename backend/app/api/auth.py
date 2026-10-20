@@ -4,7 +4,14 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core import login_guard
 from app.core.deps import CurrentUserAnyState, SessionDep
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import (
+    MIN_PASSWORD_LENGTH,
+    create_access_token,
+    hash_password,
+    hash_password_async,
+    needs_rehash,
+    verify_password_async,
+)
 from app.models import User
 from app.schemas.user import ChangePasswordIn, LoginIn, RegisterIn, TokenOut, UserOut
 
@@ -19,7 +26,7 @@ async def register(data: RegisterIn, session: SessionDep):
     exists = await session.scalar(select(User.id).where(func.lower(User.name) == data.name.lower()))
     if exists:
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um usuário com esse nome.")
-    user = User(name=data.name, password_hash=hash_password(data.password), role="player")
+    user = User(name=data.name, password_hash=await hash_password_async(data.password), role="player")
     session.add(user)
     try:
         await session.commit()
@@ -42,11 +49,21 @@ async def login(data: LoginIn, session: SessionDep):
             headers={"Retry-After": str(wait)},
         )
     user = await session.scalar(select(User).where(func.lower(User.name) == name.lower()))
-    ok = verify_password(data.password, user.password_hash if user else _DUMMY_HASH)
+    ok = await verify_password_async(data.password, user.password_hash if user else _DUMMY_HASH)
     if not user or not ok or not user.is_active:
         login_guard.failure(name)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Nome ou senha inválidos.")
     login_guard.success(name)
+    changed = False
+    if len(data.password) < MIN_PASSWORD_LENGTH and not user.must_change_password:
+        # Senha criada antes do mínimo atual: entra, mas precisa trocar antes de usar a plataforma.
+        user.must_change_password = changed = True
+    if needs_rehash(user.password_hash):
+        # Hash feito com parâmetros antigos (mais pesados): refaz com os atuais, sem a pessoa perceber.
+        user.password_hash = await hash_password_async(data.password)
+        changed = True
+    if changed:
+        await session.commit()
     return TokenOut(access_token=create_access_token(user.id, user.role), user=UserOut.model_validate(user))
 
 
@@ -58,10 +75,10 @@ async def me(user: CurrentUserAnyState):
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(data: ChangePasswordIn, user: CurrentUserAnyState, session: SessionDep):
     """Troca a própria senha. Também libera a conta de quem estava com senha temporária."""
-    if not verify_password(data.current_password, user.password_hash):
+    if not await verify_password_async(data.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Senha atual incorreta.")
     if data.new_password == data.current_password:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A nova senha precisa ser diferente da senha atual.")
-    user.password_hash = hash_password(data.new_password)
+    user.password_hash = await hash_password_async(data.new_password)
     user.must_change_password = False
     await session.commit()

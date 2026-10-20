@@ -84,15 +84,28 @@ async def sweep_tournament(session, t: Tournament) -> int:
         due = {r for r, d in parse_deadlines(stage.config).items() if d <= at}
         if not due or not results.allow_draw_for(t, stage):
             continue
+        pending = (
+            select(Match.id)
+            .where(
+                Match.stage_id == stage.id, Match.status == "scheduled", Match.round.in_(due),
+                Match.player1_id.is_not(None), Match.player2_id.is_not(None),
+                Match.postponed.is_(False), Match.deadline_waived.is_(False),
+            )
+        )
+        # Primeiro só olha (sem travar nada): na leitura comum do torneio não há o que empatar.
+        ids = (await session.scalars(pending)).all()
+        if not ids:
+            continue
+        # Há jogo vencido: agora sim trava esses confrontos e confere de novo (podem ter mudado no meio do caminho).
         ms = (
             await session.scalars(
-                select(Match)
-                .where(Match.stage_id == stage.id, Match.status == "scheduled", Match.round.in_(due))
-                .order_by(Match.round, Match.slot, Match.id)
-                .with_for_update()
+                select(Match).where(Match.id.in_(ids)).order_by(Match.round, Match.slot, Match.id).with_for_update()
             )
         ).all()
-        todo = [m for m in ms if m.player1_id and m.player2_id and not m.postponed and not m.deadline_waived]
+        todo = [
+            m for m in ms
+            if m.status == "scheduled" and m.player1_id and m.player2_id and not m.postponed and not m.deadline_waived
+        ]
         if not todo:
             continue
         for m in todo:
