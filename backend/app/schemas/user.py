@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.security import MIN_PASSWORD_LENGTH
 
@@ -27,9 +27,17 @@ def _check_password(v: str) -> str:
 class RegisterIn(BaseModel):
     name: str
     password: str
+    captcha_token: str | None = Field(None, max_length=4096)  # comprovante do Turnstile, quando a verificação está ativa
 
     _n = field_validator("name")(_clean_name)
     _p = field_validator("password")(_check_password)
+
+
+class AuthOptions(BaseModel):
+    """Como o cadastro está configurado (o site usa para mostrar ou esconder "Criar conta" e a caixinha anti-robô)."""
+
+    registration_open: bool
+    turnstile_site_key: str | None = None
 
 
 class LoginIn(BaseModel):

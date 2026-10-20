@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core import login_guard
+from app.core.config import get_settings
 from app.core.deps import CurrentUserAnyState, SessionDep
 from app.core.security import (
     MIN_PASSWORD_LENGTH,
@@ -13,7 +14,8 @@ from app.core.security import (
     verify_password_async,
 )
 from app.models import User
-from app.schemas.user import ChangePasswordIn, LoginIn, RegisterIn, TokenOut, UserOut
+from app.schemas.user import AuthOptions, ChangePasswordIn, LoginIn, RegisterIn, TokenOut, UserOut
+from app.services import captcha
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -21,8 +23,33 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _DUMMY_HASH = hash_password("dummy-password")
 
 
+@router.get("/options", response_model=AuthOptions)
+async def options():
+    """Público: se o cadastro está aberto e a chave pública da verificação anti-robô (se houver)."""
+    s = get_settings()
+    return AuthOptions(
+        registration_open=s.allow_registration,
+        turnstile_site_key=s.turnstile_site_key.strip() if s.allow_registration and s.turnstile_enabled else None,
+    )
+
+
 @router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterIn, session: SessionDep):
+    s = get_settings()
+    if not s.allow_registration:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "O cadastro está fechado. Peça a um admin para criar a sua conta.")
+    if s.turnstile_enabled:
+        if not data.captcha_token:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Conclua a verificação anti-robô antes de criar a conta.")
+        try:
+            # O IP do visitante não é enviado: no Render a API só enxerga o IP do proxy (o campo é opcional).
+            ok = await captcha.verify(data.captcha_token)
+        except captcha.CaptchaUnavailable:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "Não foi possível fazer a verificação anti-robô agora. Tente de novo em instantes."
+            )
+        if not ok:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "A verificação anti-robô falhou ou expirou. Tente de novo.")
     exists = await session.scalar(select(User.id).where(func.lower(User.name) == data.name.lower()))
     if exists:
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um usuário com esse nome.")

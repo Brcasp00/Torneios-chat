@@ -3,6 +3,10 @@ import os
 # Os testes usam SQLite em memória, nunca o banco real. Definido antes de importar o app.
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
 os.environ["JWT_SECRET"] = "test-secret-com-mais-de-32-bytes-para-sha256"
+# Os testes usam o cadastro público; a verificação anti-robô fica desligada (test_security a liga com um verificador falso).
+os.environ["ALLOW_REGISTRATION"] = "true"
+os.environ["TURNSTILE_SITE_KEY"] = ""
+os.environ["TURNSTILE_SECRET"] = ""
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
