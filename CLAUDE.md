@@ -139,6 +139,7 @@ frontend/
 - Token JWT em `localStorage` (`torneios.token`); API em `VITE_API_URL` (padrão `http://localhost:8000`; ver `frontend/.env.example`). `frontend/` não é mais ignorado pelo `.gitignore` na branch `front-end`.
 - Rodar tudo localmente: `py main.py` na raiz (sobe API em :8000 e site em :5173; `--status`, `--only back|front`, `--open`, `--install`). Só serve ao desenvolvimento local.
 - Conferir tipos/build: `cd frontend; npm run build`.
+- Deploy no Netlify: importar o repositório; Base directory `frontend` (o `netlify.toml` define build `npm run build`, publish `dist`, Node 20 e o redirect de SPA); variável `VITE_API_URL` = URL da API no Render; depois pôr a URL do Netlify (sem barra final) em `CORS_ORIGINS` no Render.
 
 ## Comandos úteis (PowerShell, em `D:\Projetos\backend`)
 ```

@@ -1,0 +1,13 @@
+# Configuração do Netlify (Base directory = frontend).
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# App de página única: qualquer endereço (ex.: /torneios/3) deve abrir o index.html, senão atualizar a página dá 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
