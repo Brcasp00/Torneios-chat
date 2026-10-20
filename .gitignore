@@ -9,5 +9,3 @@ __pycache__/
 .vscode/
 node_modules/
 
-# Worktree do front-end (vive na branch front-end)
-frontend/

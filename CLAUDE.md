@@ -6,7 +6,7 @@
 
 1. **Back-end → GitHub automaticamente.** Toda modificação feita no back-end (`backend/`) deve ser commitada e enviada (`git push`) para a branch **`Back-end`** de https://github.com/Brcasp00/Torneios-chat (atenção: o nome real da branch tem **B maiúsculo**: `Back-end`). Faça isso sem precisar pedir confirmação, ao final de cada conjunto coerente de mudanças (e sempre ao fechar uma fase), com os testes passando.
 2. **`main` = produção.** A `main` só recebe código por **merge/Pull Request de `Back-end` (e `front-end`) feito quando o usuário pedir**. Nunca dê push direto na `main` por conta própria.
-3. **Front-end → branch `front-end`.** Toda modificação no front-end vai para a branch **`front-end`** (https://github.com/Brcasp00/Torneios-chat/tree/front-end). Nunca misture código de front-end na branch `Back-end` nem o contrário. Para trabalhar nas duas sem trocar de branch, use um worktree: `git worktree add D:\Projetos\frontend front-end` (a pasta `frontend/` já está no `.gitignore` da branch `Back-end`).
+3. **Front-end → branch `front-end`.** Toda modificação no front-end vai para a branch **`front-end`** (https://github.com/Brcasp00/Torneios-chat/tree/front-end). Nunca misture código de front-end na branch `Back-end` nem o contrário. Hoje o repositório local está com a branch `front-end` em `D:\Projetos` (que também contém `backend/` vindo da `main`); alterações em `backend/` continuam indo só para `Back-end` (use um worktree para ela se precisar mexer no back-end: `git worktree add D:\Projetos-back Back-end`).
 4. **Segredos nunca vão para o Git.** `backend/.env` (DATABASE_URL, JWT_SECRET) é ignorado. Antes de cada commit, confira `git status`/`git diff --cached` e não deixe passar `.env`, `*.db`, `.venv/`. Nunca imprima a senha do banco nem cole a connection string em respostas/logs.
 5. **Testes antes de commitar:** `cd backend; .\.venv\Scripts\python -m pytest` deve passar.
 6. **Mensagens de commit** em português, no imperativo, com prefixo da fase quando fizer sentido (ex.: `Fase 4: gera chaveamento do mata-mata`), terminando com a linha `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
@@ -19,7 +19,7 @@
 O usuário organiza, com amigos, torneios de **Pokémon competitivo** (maioria das partidas no **Pokémon Showdown**) e quer uma plataforma própria. Escala pequena (dezenas de usuários). Visualização **pública**; ações exigem login. Interface em português.
 
 - **Back-end:** FastAPI + SQLAlchemy 2 (async) + Alembic. **Banco:** Supabase (Postgres, plano gratuito). Não usamos Supabase Auth nem a API REST do Supabase: autenticação própria (nome + senha, argon2, JWT).
-- **Front-end:** ainda não iniciado. Será básico (o design será discutido depois).
+- **Front-end:** React + Vite + TypeScript em `frontend/` (branch `front-end`), tema escuro; ver a seção "Front-end".
 - **Repositório:** https://github.com/Brcasp00/Torneios-chat — branches `Back-end`, `front-end`, `main`. Raiz local: `D:\Projetos` (pasta `backend/` dentro).
 - Possível futuro: notificações no Discord (a avaliar).
 
@@ -97,7 +97,7 @@ backend/
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 8 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento). 94 testes passando. Migrations 0001–0003 aplicadas no Supabase; a **0004** (colunas novas em `matches` e `standings_snapshots`) é aplicada pelo Render no próximo start. Back-end implantado no Render.
+**Concluído:** Fases 1 a 9 (back-end: autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, senha temporária com troca obrigatória, prazo das rodadas; front-end básico completo em `frontend/` + `main.py`). 94 testes do back-end passando. Migrations 0001–0006 aplicadas no Supabase (o Render também as aplica sozinho no start). Back-end implantado no Render.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, e repescagem em subtorneio (entrada automática dos candidatos e retorno ao mata-mata principal).
 
 ## Histórico de fases
@@ -116,19 +116,29 @@ backend/
 
 - **Fase 8 — Histórico e adiamento:** `services/history.py` (registros `round` e `final` em `standings_snapshots`, colunas `kind`/`round`), migration 0004 (também adiciona `matches.postponed*`), `GET /tournaments/{id}/history/rounds|stages` e filtro `kind` em `/history`, adiamento de jogo/rodada (`POST /matches/{id}/postpone|resume`, `POST /tournaments/{id}/rounds/postpone|resume`), filtro `postponed` em `/matches`, bloqueio de encerramento manual com jogo adiado pendente. 86 testes.
 
-## Próxima fase — Fase 9: front-end básico (branch `front-end`)
+  Auditoria (junto da Fase 8): `GET /audit` (admin; filtros actor_id, action exata ou prefixo "match.", entity, entity_id, since, until; limit/offset; devolve total+items) e `GET /matches/{id}/timeline` (público: reportes, revisões e ações do admin em ordem). 88 testes.
 
-Ver o roadmap abaixo; antes de começar, discutir o design com o usuário. Auditoria (concluída junto da Fase 8): `GET /audit` (admin; filtros actor_id, action exata ou prefixo "match.", entity, entity_id, since, until; limit/offset; devolve total+items) e `GET /matches/{id}/timeline` (público: reportes, revisões e ações do admin em ordem).
+- **Fase 9 — Front-end (branch `front-end`):** app React 18 + Vite + TypeScript em `frontend/` (tema escuro estilo e-sports/Pokémon, responsivo, CSS puro, `react-router-dom`, sem biblioteca de UI), mais o orquestrador local `main.py` na raiz. Telas: início (torneios em andamento + "seus jogos pendentes"), lista de torneios, página do torneio com abas (visão geral, tabela/grupos, chaveamento, confrontos, **histórico** — fases encerradas, rodada a rodada, registro de alterações — e **gerenciar** para admin/organizador: status, inscrição, potes, prévia/início do sorteio, adiar rodada, subtorneios/ligação de repescagem), página do confronto (reporte com replay, validar/rejeitar/lançar/W.O./invalidar/adiar, linha do tempo), criação de torneio/subtorneio (botão "Novo torneio" na lista de torneios; modelos prontos + JSON para `custom`), conta (trocar senha) e administração, só para admins (criar usuários em página própria `/admin/usuarios/novo`, papéis, redefinir senha, auditoria). Atualização por polling (15–30 s, só com a aba visível). Prazo das rodadas: card "Prazo das rodadas" na aba Gerenciar (data/hora por rodada), prazo e avisos ("prazo vencido", "empate por prazo") nos confrontos. Senha temporária: quem entra com `must_change_password` é levado a "Minha conta" e não acessa mais nada até trocar a senha.
 
-## Roadmap restante
+## Próxima fase — Fase 10: polimento e deploy
 
-- **Fase 9 — Front-end básico** (branch `front-end`; inclui a aba de histórico com rodadas e estados finais das fases): login/cadastro, lista de torneios, página do torneio (info + tabela/chaveamento + botão do subtorneio), página do confronto com reporte, painel do admin. Tempo real por polling (ou WebSocket).
-- **Fase 10 — Polimento e deploy:** hospedagem da API e do front, CORS, variáveis de ambiente, documentação; avaliar notificações no Discord.
+Hospedagem do front (ex.: Render Static Site ou Netlify; build `npm run build` em `frontend/`, publicar `dist/`, variável `VITE_API_URL` apontando para a API do Render, e `CORS_ORIGINS` da API com a URL do front; SPA precisa de rewrite `/* -> /index.html`), revisão de mensagens/estados vazios, testes manuais ponta a ponta em celular, documentação final; avaliar notificações no Discord. Pendências do front: testes automatizados (nenhum ainda), editar torneio em rascunho pela interface (hoje só o back-end tem `PATCH /tournaments/{id}`), sorteio manual (`arrangement`) pela interface (a API já aceita), paginação do registro de alterações.
 
 ## Perguntas em aberto / ideias
 - Notificações via Discord (webhook/bot): "interessante, verificar viabilidade depois".
 - Personalizações adicionais de formato: o usuário prometeu pedir depois.
-- Design do front-end: a discutir.
+
+## Front-end (`frontend/`)
+```
+frontend/
+  src/ main.tsx App.tsx api.ts (cliente + tipos) auth.tsx hooks.ts (useLoad com polling) labels.ts styles.css
+  src/components/ ui.tsx (Tabs, StandingsTable, MatchRow, BracketMatch, useAction...) SnapshotView.tsx TournamentCard.tsx
+  src/pages/ Home Login Account Tournaments TournamentPage MatchPage CreateTournament Admin
+  src/pages/tournament/ Overview Standings Bracket Matches History Manage
+```
+- Token JWT em `localStorage` (`torneios.token`); API em `VITE_API_URL` (padrão `http://localhost:8000`; ver `frontend/.env.example`). `frontend/` não é mais ignorado pelo `.gitignore` na branch `front-end`.
+- Rodar tudo localmente: `py main.py` na raiz (sobe API em :8000 e site em :5173; `--status`, `--only back|front`, `--open`, `--install`). Só serve ao desenvolvimento local.
+- Conferir tipos/build: `cd frontend; npm run build`.
 
 ## Comandos úteis (PowerShell, em `D:\Projetos\backend`)
 ```
