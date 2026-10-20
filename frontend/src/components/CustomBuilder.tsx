@@ -169,7 +169,11 @@ export function analyze(b: Builder, maxPlayers: number, isSub: boolean): Analysi
       let count = r.posTo - r.posFrom + 1;
       if (r.source === "group_position") {
         const g = groupsOf(st, size);
-        if (size && r.posTo > Math.floor(size / g)) errors.push(`Os grupos da fase ${pos} têm no mínimo ${Math.floor(size / g)} jogadores; uma regra pede a ${r.posTo}ª posição.`);
+        // Quem ocupa vagas precisa existir em todos os grupos (o menor); eliminação/repescagem pode citar posições
+        // que só os grupos maiores têm (mesma regra do servidor).
+        const fills = r.target === "stage" || r.target === "parent_tournament";
+        const limit = fills ? Math.floor(size / g) : Math.ceil(size / g);
+        if (size && r.posTo > limit) errors.push(`Os grupos da fase ${pos} têm ${fills ? "no mínimo" : "no máximo"} ${limit} jogadores; uma regra pede a ${r.posTo}ª posição.`);
         if (r.fixedCrossing && r.target === "stage" && b.stages[r.toStage - 1]?.type === "knockout" && g % 2) errors.push(`Cruzamento fixo exige número par de grupos (a fase ${pos} tem ${g}).`);
         count *= g;
       }
