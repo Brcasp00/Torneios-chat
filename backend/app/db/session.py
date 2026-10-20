@@ -1,0 +1,25 @@
+from collections.abc import AsyncIterator
+from uuid import uuid4
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.core.config import get_settings
+
+_url = get_settings().async_database_url
+
+_kwargs: dict = {"pool_pre_ping": True}
+if _url.startswith("postgresql"):
+    # Supabase pooler (pgbouncer em modo transaction) não suporta prepared statements nomeados fixos.
+    _kwargs["connect_args"] = {
+        "statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
+    }
+    _kwargs.update(pool_size=5, max_overflow=5)
+
+engine = create_async_engine(_url, **_kwargs)
+SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def get_session() -> AsyncIterator[AsyncSession]:
+    async with SessionLocal() as session:
+        yield session

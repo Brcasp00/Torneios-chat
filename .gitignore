@@ -1,0 +1,13 @@
+# Segredos e artefatos locais
+.env
+*.env
+*.db
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.vscode/
+node_modules/
+
+# Worktree do front-end (vive na branch front-end)
+frontend/
