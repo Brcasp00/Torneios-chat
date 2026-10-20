@@ -2,6 +2,8 @@
 export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:8000";
 
 const TOKEN_KEY = "torneios.token";
+/** Evento disparado quando a API recusa o crachá guardado (o AuthProvider tira o usuário da tela). */
+export const SESSION_EXPIRED = "torneios:session-expired";
 
 export const tokenStore = {
   get: () => {
@@ -59,6 +61,12 @@ export async function api<T = unknown>(path: string, opts: { method?: string; bo
     body = await res.json();
   } catch {
     /* sem corpo JSON */
+  }
+  if (res.status === 401 && token && path !== "/auth/login") {
+    // Crachá recusado (vencido ou senha trocada em outro aparelho): sai da conta neste navegador.
+    tokenStore.set(null);
+    window.dispatchEvent(new Event(SESSION_EXPIRED));
+    throw new ApiError(401, "Sua sessão terminou (a senha foi trocada ou o login venceu). Entre de novo.");
   }
   if (!res.ok) throw new ApiError(res.status, errorMessage(body, res.status));
   return body as T;

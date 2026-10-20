@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, tokenStore, type Token, type User } from "./api";
+import { api, SESSION_EXPIRED, tokenStore, type Token, type User } from "./api";
 
 interface AuthCtx {
   user: User | null;
@@ -28,6 +28,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch(() => tokenStore.set(null))
       .finally(() => setReady(true));
+  }, []);
+
+  // A API recusou o crachá (senha trocada em outro aparelho, login vencido): mostra o site como visitante.
+  useEffect(() => {
+    const expired = () => setUser(null);
+    window.addEventListener(SESSION_EXPIRED, expired);
+    return () => window.removeEventListener(SESSION_EXPIRED, expired);
   }, []);
 
   const finish = useCallback((t: Token) => {
