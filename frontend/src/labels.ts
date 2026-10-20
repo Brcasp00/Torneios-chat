@@ -43,6 +43,8 @@ export const actionLabel: Record<string, string> = {
   "match.resume": "Adiamento removido",
   "report.validated": "Reporte aprovado",
   "report.rejected": "Reporte rejeitado",
+  "match.auto_draw": "Empate automático por prazo vencido",
+  "stage.set_deadlines": "Prazos das rodadas definidos",
   "round.postpone": "Rodada adiada",
   "round.resume": "Adiamento da rodada removido",
   "tournament.create": "Torneio criado",
@@ -70,4 +72,12 @@ export function fmtDate(iso: string | null | undefined): string {
 export function scoreText(m: { p1_wins: number | null; p2_wins: number | null; status: string }): string {
   if (m.status !== "validated" || m.p1_wins === null || m.p2_wins === null) return "×";
   return `${m.p1_wins} × ${m.p2_wins}`;
+}
+
+/** Valor para <input type="datetime-local"> (horário local) a partir de um ISO. */
+export function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }

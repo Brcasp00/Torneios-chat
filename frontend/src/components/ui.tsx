@@ -99,6 +99,8 @@ export function MatchRow({ m, showRound = false }: { m: Match; showRound?: boole
       <span className="meta">
         {showRound && <span className="muted small">R{m.round}{m.group_label ? ` · ${m.group_label}` : ""}</span>}
         {m.postponed && m.status !== "validated" && <Badge kind="postponed">adiado</Badge>}
+        {m.overdue && <Badge kind="withdrawn">prazo vencido</Badge>}
+        {m.auto_result && <Badge kind="postponed">empate por prazo</Badge>}
         {m.is_walkover && <Badge>W.O.</Badge>}
         {m.is_draw && <Badge>empate</Badge>}
         <Badge kind={m.status}>{matchStatus[m.status] ?? m.status}</Badge>

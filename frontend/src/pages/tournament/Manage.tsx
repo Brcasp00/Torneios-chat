@@ -4,7 +4,7 @@ import { api, type DrawOut, type Match, type TournamentDetail } from "../../api"
 import { useAuth } from "../../auth";
 import { Badge, useAction } from "../../components/ui";
 import { useLoad } from "../../hooks";
-import { tournamentStatus } from "../../labels";
+import { toLocalInput, tournamentStatus } from "../../labels";
 
 const NEXT_STATUS: Record<string, { to: string; label: string; danger?: boolean }[]> = {
   draft: [{ to: "registration", label: "Abrir inscrições" }, { to: "cancelled", label: "Cancelar torneio", danger: true }],
@@ -22,6 +22,7 @@ export default function Manage({ t, onChanged }: { t: TournamentDetail; onChange
       {(editable || t.status === "running") && <PlayersCard t={t} onChanged={onChanged} editable={editable} />}
       {editable && <DrawCard t={t} onChanged={onChanged} />}
       {t.status === "running" && <PostponeCard t={t} onChanged={onChanged} />}
+      {t.status !== "finished" && t.status !== "cancelled" && <DeadlinesCard t={t} onChanged={onChanged} />}
       <SubtournamentsCard t={t} onChanged={onChanged} />
     </div>
   );
@@ -260,6 +261,82 @@ function SubtournamentsCard({ t, onChanged }: { t: TournamentDetail; onChanged: 
         </div>
       ))}
       <Link className="btn" to={`/torneios/novo?parent=${t.id}`}>Criar subtorneio</Link>
+    </div>
+  );
+}
+
+function DeadlinesCard({ t, onChanged }: { t: TournamentDetail; onChanged: () => void }) {
+  const stages = t.stages.filter((s) => s.status !== "finished");
+  const [stageId, setStageId] = useState<number | "">(stages[0]?.id ?? "");
+  const [edit, setEdit] = useState<Record<number, string>>({});
+  const { run, busy, box, setMsg } = useAction();
+  const ms = useLoad(
+    () => (stageId === "" ? Promise.resolve([] as Match[]) : api<Match[]>(`/tournaments/${t.id}/matches`, { params: { stage_id: stageId } })),
+    [t.id, stageId],
+  );
+  if (stages.length === 0) return null;
+
+  const stage = t.stages.find((s) => s.id === stageId);
+  const current = new Map<number, string | null>();
+  for (const m of ms.data ?? []) if (m.group_label !== "3rd" && !current.has(m.round)) current.set(m.round, m.deadline);
+  const rounds = [...current.keys()].sort((a, b) => a - b);
+  const autoDraw = (stage?.type === "league" || stage?.type === "groups") && !!(t.config as { allow_draw?: boolean } | null)?.allow_draw;
+
+  const save = async () => {
+    const changes: Record<string, string | null> = {};
+    for (const r of rounds) {
+      const v = edit[r];
+      if (v === undefined || v === toLocalInput(current.get(r))) continue;
+      changes[String(r)] = v === "" ? null : new Date(v).toISOString();
+    }
+    if (Object.keys(changes).length === 0) return setMsg({ kind: "error", text: "Nenhuma data foi alterada. Escolha ou apague a data de alguma rodada antes de salvar." });
+    const ok = await run(() => api(`/tournaments/${t.id}/stages/${stageId}/deadlines`, { method: "PUT", body: { deadlines: changes } }), "Prazos salvos.");
+    if (ok) { setEdit({}); await ms.reload(); onChanged(); }
+  };
+
+  return (
+    <div className="card">
+      <h2>Prazo das rodadas</h2>
+      <p className="muted">
+        Defina a data e a hora em que cada rodada termina (horário do seu navegador).{" "}
+        {autoDraw
+          ? "Passado o prazo, os jogos que ficarem sem resultado são marcados automaticamente como empate. Jogos adiados e com reporte pendente não são afetados. Para liberar uma entrega atrasada, invalide o empate no confronto."
+          : "Nesta fase o prazo vencido não decide nada sozinho (mata-mata/rodada única, ou torneio sem empate): os confrontos atrasados só ganham o aviso de \"prazo vencido\"."}
+      </p>
+      {box}
+      {stages.length > 1 && (
+        <div className="field" style={{ maxWidth: 320 }}>
+          <label>Fase</label>
+          <select value={stageId} onChange={(e) => { setStageId(Number(e.target.value)); setEdit({}); }}>
+            {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+      )}
+      {rounds.length === 0 ? (
+        <div className="alert">As rodadas aparecem depois que a fase começa (após o sorteio). Aí você poderá definir o prazo de cada uma.</div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Rodada</th><th>Fim do prazo</th><th></th></tr></thead>
+            <tbody>
+              {rounds.map((r) => (
+                <tr key={r}>
+                  <td>Rodada {r}</td>
+                  <td style={{ minWidth: 220 }}>
+                    <input type="datetime-local" value={edit[r] ?? toLocalInput(current.get(r))} onChange={(e) => setEdit({ ...edit, [r]: e.target.value })} />
+                  </td>
+                  <td>
+                    {(edit[r] ?? toLocalInput(current.get(r))) !== "" && (
+                      <button className="btn small ghost" disabled={busy} onClick={() => setEdit({ ...edit, [r]: "" })}>Remover prazo</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rounds.length > 0 && <div style={{ marginTop: ".8rem" }}><button className="btn primary" disabled={busy} onClick={save}>Salvar prazos</button></div>}
     </div>
   );
 }

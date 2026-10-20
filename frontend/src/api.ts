@@ -96,6 +96,7 @@ export interface Match {
   p1_wins: number | null; p2_wins: number | null; p1_remaining: number | null; p2_remaining: number | null;
   winner_id: number | null; is_draw: boolean; is_walkover: boolean; validated_at: string | null; has_pending_report: boolean;
   postponed: boolean; postponed_reason: string | null;
+  deadline: string | null; overdue: boolean; auto_result: boolean; deadline_waived: boolean;
 }
 export interface Report { id: number; reported_by: number | null; p1_wins: number; p2_wins: number; p1_remaining: number; p2_remaining: number; replay_urls: string[] | null; notes: string | null; status: string; created_at: string; reviewed_by: number | null; reviewed_at: string | null; review_note: string | null }
 export interface MatchDetail extends Match { tournament_name: string; tournament_status: string; stage_name: string; battle_rules: Record<string, unknown> | null; reports: Report[]; can_report: boolean; can_manage: boolean }

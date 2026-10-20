@@ -58,6 +58,19 @@ export default function MatchPage() {
         {winner && <p className="center">Vencedor: <strong>{winner.name}</strong></p>}
         {m.postponed && m.postponed_reason && <div className="alert warn">Adiado: {m.postponed_reason}</div>}
         {m.status === "reported" && <div className="alert warn">Há um reporte aguardando validação do organizador.</div>}
+        {m.auto_result ? (
+          <div className="alert warn">
+            Empate marcado automaticamente: o prazo da rodada ({fmtDate(m.deadline)}) venceu sem resultado.{" "}
+            {m.can_manage ? "Se os jogadores puderem entregar atrasado, invalide o resultado: o prazo deixa de valer para este jogo." : "Se vocês ainda querem jogar, fale com o organizador."}
+          </div>
+        ) : m.deadline && !decided && m.status !== "void" ? (
+          <div className={`alert ${m.overdue ? "error" : ""}`}>
+            Prazo da rodada: <strong>{fmtDate(m.deadline)}</strong>
+            {m.overdue && (m.can_manage ? " — vencido. Resolva com W.O., adiamento ou lançando o resultado." : " — vencido. Fale com o organizador.")}
+            {!m.overdue && m.postponed && " (jogo adiado: o prazo não se aplica)"}
+          </div>
+        ) : null}
+        {m.deadline_waived && !decided && <div className="alert ok">O organizador liberou a entrega deste jogo depois do prazo.</div>}
       </div>
 
       {reportBlocked && <div className="alert">{reportBlocked}</div>}
@@ -190,7 +203,7 @@ function StaffPanel({ m, onDone }: { m: MatchDetail; onDone: () => void }) {
             <button className="btn" disabled={busy} onClick={() => act(() => api(`/matches/${m.id}/walkover`, { body: { winner_id: m.player2!.id, note: note || null } }), "W.O. aplicado.")}>W.O. p/ {m.player2.name}</button>
           </>
         )}
-        {decided && <button className="btn danger" disabled={busy} onClick={() => confirm("Invalidar este resultado? A tabela/chaveamento será recalculada.") && act(() => api(`/matches/${m.id}/invalidate`, { body: { note: note || null } }), "Resultado invalidado.")}>Invalidar resultado</button>}
+        {decided && <button className="btn danger" disabled={busy} onClick={() => confirm(m.auto_result ? "Invalidar o empate automático? O jogo volta a ficar pendente e o prazo deixa de valer para ele." : "Invalidar este resultado? A tabela/chaveamento será recalculada.") && act(() => api(`/matches/${m.id}/invalidate`, { body: { note: note || null } }), "Resultado invalidado.")}>Invalidar resultado</button>}
         {canPostpone && <button className="btn" disabled={busy} onClick={() => act(() => api(`/matches/${m.id}/postpone`, { body: { reason: note || null } }), "Jogo adiado.")}>Adiar jogo</button>}
         {m.postponed && !decided && <button className="btn" disabled={busy} onClick={() => act(() => api(`/matches/${m.id}/resume`, { method: "POST", body: {} }), "Adiamento removido.")}>Remover adiamento</button>}
       </div>

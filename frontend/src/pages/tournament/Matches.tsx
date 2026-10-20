@@ -3,7 +3,7 @@ import { api, type Match, type TournamentDetail } from "../../api";
 import { useAuth } from "../../auth";
 import { ErrorBox, Loading, MatchRow } from "../../components/ui";
 import { useLoad } from "../../hooks";
-import { matchStatus } from "../../labels";
+import { fmtDate, matchStatus } from "../../labels";
 
 export default function Matches({ t }: { t: TournamentDetail }) {
   const { user } = useAuth();
@@ -49,7 +49,11 @@ export default function Matches({ t }: { t: TournamentDetail }) {
           <h2>{t.stages.find((s) => s.id === sid)?.name}</h2>
           {[...rounds.entries()].map(([label, list]) => (
             <div key={label} style={{ marginBottom: ".9rem" }}>
-              <h3>{label}</h3>
+              <h3>{label}{list[0]?.deadline && list[0].group_label !== "3rd" && (
+                <span style={{ textTransform: "none", letterSpacing: 0, marginLeft: ".6rem", color: list.some((m) => m.overdue) ? "var(--red)" : "var(--muted)" }}>
+                  · prazo {fmtDate(list[0].deadline)}
+                </span>
+              )}</h3>
               {list.map((m) => <MatchRow key={m.id} m={m} showRound={!!m.group_label && m.group_label !== "3rd"} />)}
             </div>
           ))}
