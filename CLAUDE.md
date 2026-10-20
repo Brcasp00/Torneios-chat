@@ -114,7 +114,7 @@ backend/
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **101 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase (o Render também as aplica sozinho no start).
+**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **103 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase (o Render também as aplica sozinho no start).
 **Em produção:** API no Render e site no Netlify, ambos seguindo a `main` (a `main` contém tudo até o commit "Front: mensagem de falha de conexão mais curta"). A `front-end` e a `Back-end` estão sincronizadas com a `main`, exceto por este documento quando editado.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, repescagem em subtorneio, histórico, adiamento e prazos. O usuário já testou a interface com os usuários de teste e relatou que funciona; ainda falta simular um torneio completo de ponta a ponta (sorteio → jogos → mata-mata → repescagem).
 
@@ -153,7 +153,9 @@ backend/
   - argon2id com parâmetros mínimos da OWASP (19 MiB, t=2, p=1), calculado em thread (`hash_password_async`/`verify_password_async`, no máximo 2 simultâneos); hashes antigos são refeitos no login (`needs_rehash`).
   - `deadlines.sweep_tournament` só usa `FOR UPDATE` quando há jogo a empatar (consulta prévia sem trava, com os filtros no SQL).
   - Conexão com o banco com `ssl="require"` (verificado: TLS 1.3); `limit`/`offset` negativos → 422.
-  - Avaliados e pendentes (decisão do usuário): fechar/limitar o cadastro público, revogar tokens ao trocar senha (precisa de migration), cabeçalhos de segurança no Netlify, atualizar Vite/React Router, banco separado para testes + backup.
+  - Cabeçalhos de segurança no `frontend/netlify.toml` (CSP com `connect-src` para `*.onrender.com` e `challenges.cloudflare.com` liberado para o Turnstile, anti-iframe, nosniff, HSTS).
+  - **Cadastro público configurável** (commit `030dae5`): `ALLOW_REGISTRATION` (padrão **fechado**), `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET` (Cloudflare Turnstile, `services/captcha.py`); `GET /auth/options` informa o site; `RegisterIn.captcha_token`. Front: `components/Turnstile.tsx` e Login esconde "Criar conta" se fechado. Escolha do usuário: cadastro aberto + Turnstile (variáveis a criar no Render). Testes ligam o cadastro via env no `conftest`.
+  - Avaliados e pendentes (decisão do usuário): revogar tokens ao trocar senha (precisa de migration), cabeçalhos de segurança no Netlify, atualizar Vite/React Router, banco separado para testes + backup.
 
 ## Próxima fase — Fase 10: polimento (em andamento)
 

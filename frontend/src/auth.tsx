@@ -5,7 +5,7 @@ interface AuthCtx {
   user: User | null;
   ready: boolean;
   login: (name: string, password: string) => Promise<void>;
-  register: (name: string, password: string) => Promise<void>;
+  register: (name: string, password: string, captchaToken?: string | null) => Promise<void>;
   logout: () => void;
   /** Recarrega os dados do usuário logado (ex.: depois de trocar a senha temporária). */
   refresh: () => Promise<void>;
@@ -40,7 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       ready,
       login: async (name, password) => finish(await api<Token>("/auth/login", { body: { name, password } })),
-      register: async (name, password) => finish(await api<Token>("/auth/register", { body: { name, password } })),
+      register: async (name, password, captchaToken) =>
+        finish(await api<Token>("/auth/register", { body: { name, password, captcha_token: captchaToken ?? null } })),
       refresh: async () => setUser(await api<User>("/auth/me")),
       logout: () => {
         tokenStore.set(null);
