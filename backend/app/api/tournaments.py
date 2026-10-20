@@ -26,7 +26,7 @@ from app.schemas.tournament import (
     TournamentSummary,
     TournamentUpdate,
 )
-from app.services import engine, results, templates
+from app.services import deadlines, engine, results, templates
 
 router = APIRouter(prefix="/tournaments", tags=["tournaments"])
 
@@ -249,7 +249,9 @@ async def list_tournaments(
 
 @router.get("/{tournament_id}", response_model=TournamentDetail)
 async def get_tournament(tournament_id: int, session: SessionDep, user: OptionalUser):
-    return await _detail(session, await _get_or_404(session, tournament_id), user)
+    t = await _get_or_404(session, tournament_id)
+    await deadlines.safe_sweep(session, t)  # prazos vencidos viram empate antes de mostrar o torneio
+    return await _detail(session, t, user)
 
 
 @router.get("/{tournament_id}/players", response_model=list[PlayerOut])
