@@ -4,7 +4,7 @@
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 # Cabeçalhos de segurança (valem para todas as páginas do site publicado).
 # - Content-Security-Policy: o navegador só executa scripts e estilos do próprio site e só conversa com o próprio site
