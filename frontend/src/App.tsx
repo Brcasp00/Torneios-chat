@@ -53,6 +53,10 @@ function RequireAuth({ staff, admin, children }: { staff?: boolean; admin?: bool
 }
 
 export default function App() {
+  const { user } = useAuth();
+  const loc = useLocation();
+  // Senha temporária: enquanto não for trocada, a única página liberada é "Minha conta".
+  if (user?.must_change_password && loc.pathname !== "/conta") return <Navigate to="/conta" replace />;
   return (
     <>
       <Nav />

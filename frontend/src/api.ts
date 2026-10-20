@@ -66,7 +66,7 @@ export async function api<T = unknown>(path: string, opts: { method?: string; bo
 
 // ---------- tipos ----------
 export type Role = "admin" | "organizer" | "player";
-export interface User { id: number; name: string; role: Role; is_active: boolean; created_at: string }
+export interface User { id: number; name: string; role: Role; is_active: boolean; created_at: string; must_change_password?: boolean }
 export interface Token { access_token: string; user: User }
 export interface PlayerRef { id: number; name: string }
 

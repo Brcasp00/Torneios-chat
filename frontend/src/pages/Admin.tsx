@@ -57,12 +57,12 @@ function Users() {
       {created && (
         <div className={`alert ${created.temporary_password ? "warn" : "ok"}`}>
           Usuário <strong>{created.name}</strong> criado como {roleLabel[created.role].toLowerCase()}.
-          {created.temporary_password && <> Senha temporária: <strong>{created.temporary_password}</strong>. Envie por um canal seguro; ela não será mostrada de novo. A pessoa pode trocá-la em "Minha conta".</>}
+          {created.temporary_password && <> Senha temporária: <strong>{created.temporary_password}</strong>. Envie por um canal seguro; ela não será mostrada de novo. No primeiro acesso a pessoa será obrigada a trocá-la.</>}
           {" "}<button className="btn small ghost" onClick={() => setCreated(null)}>Fechar</button>
         </div>
       )}
       {box}
-      {temp && <div className="alert warn">Senha temporária — <strong>{temp}</strong>. Envie ao usuário por um canal seguro; ela não será mostrada de novo.</div>}
+      {temp && <div className="alert warn">Senha temporária — <strong>{temp}</strong>. Envie ao usuário por um canal seguro; ela não será mostrada de novo e ele terá de trocá-la ao entrar.</div>}
       <div className="card table-wrap">
         <table>
           <thead><tr><th>Nome</th><th>Papel</th><th>Conta</th><th>Cadastro</th><th></th></tr></thead>

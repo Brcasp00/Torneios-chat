@@ -49,7 +49,7 @@ export default function CreateUser() {
         <div className="field">
           <label htmlFor="cu-pw">Senha (deixe vazio para gerar uma temporária)</label>
           <input id="cu-pw" type="text" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} autoComplete="off" />
-          <p className="muted small" style={{ margin: ".3rem 0 0" }}>A pessoa pode trocar a senha depois em "Minha conta".</p>
+          <p className="muted small" style={{ margin: ".3rem 0 0" }}>Se ficar vazio, a senha gerada é temporária: no primeiro acesso a pessoa será obrigada a trocá-la. Se você definir uma senha, ela vale como definitiva.</p>
         </div>
         <div className="row">
           <button className="btn primary" disabled={busy}>{busy ? "Criando…" : "Criar usuário"}</button>

@@ -7,6 +7,8 @@ interface AuthCtx {
   login: (name: string, password: string) => Promise<void>;
   register: (name: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Recarrega os dados do usuário logado (ex.: depois de trocar a senha temporária). */
+  refresh: () => Promise<void>;
   isStaff: boolean;
   isAdmin: boolean;
 }
@@ -39,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ready,
       login: async (name, password) => finish(await api<Token>("/auth/login", { body: { name, password } })),
       register: async (name, password) => finish(await api<Token>("/auth/register", { body: { name, password } })),
+      refresh: async () => setUser(await api<User>("/auth/me")),
       logout: () => {
         tokenStore.set(null);
         setUser(null);
