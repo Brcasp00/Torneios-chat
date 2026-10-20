@@ -99,7 +99,7 @@ async def test_change_password(client):
     r = await client.post("/auth/change-password", json={"current_password": "x", "new_password": "novasenha"}, headers=auth(tok))
     assert r.status_code == 400
     r = await client.post("/auth/change-password", json={"current_password": "pikachu1", "new_password": "novasenha"}, headers=auth(tok))
-    assert r.status_code == 204
+    assert r.status_code == 200 and r.json()["access_token"]  # devolve um crachá novo para quem trocou
     assert (await login(client, "Ash", "novasenha")).status_code == 200
 
 
@@ -146,7 +146,8 @@ async def test_temporary_password_forces_change(client):
     r = await client.post("/auth/change-password", json={"current_password": temp, "new_password": temp}, headers=h(tok))
     assert r.status_code == 400
     r = await client.post("/auth/change-password", json={"current_password": temp, "new_password": "minhasenha1"}, headers=h(tok))
-    assert r.status_code == 204
+    assert r.status_code == 200
+    tok = r.json()["access_token"]  # o crachá anterior deixa de valer
     assert (await client.get("/auth/me", headers=h(tok))).json()["must_change_password"] is False
     assert (await client.post("/tournaments/1/withdraw", headers=h(tok))).status_code != 403
 

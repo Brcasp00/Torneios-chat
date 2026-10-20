@@ -46,8 +46,28 @@ async def verify_password_async(password: str, password_hash: str) -> bool:
 
 def create_access_token(user_id: int, role: str) -> str:
     s = get_settings()
-    exp = datetime.now(timezone.utc) + timedelta(minutes=s.access_token_minutes)
-    return jwt.encode({"sub": str(user_id), "role": role, "exp": exp}, s.jwt_secret, algorithm=s.jwt_algorithm)
+    now = now_utc()
+    exp = now + timedelta(minutes=s.access_token_minutes)
+    payload = {"sub": str(user_id), "role": role, "iat": int(now.timestamp()), "exp": exp}
+    return jwt.encode(payload, s.jwt_secret, algorithm=s.jwt_algorithm)
+
+
+def issued_before_password_change(payload: dict, password_changed_at: datetime | None) -> bool:
+    """O crachá foi emitido antes da última troca de senha? Então não vale mais (quem tinha a senha antiga sai).
+
+    Compara em segundos inteiros (precisão do `iat`): o crachá novo devolvido na própria troca continua valendo.
+    Crachás antigos, sem `iat`, deixam de valer assim que a senha é trocada.
+    """
+    if password_changed_at is None:
+        return False
+    if password_changed_at.tzinfo is None:  # SQLite (testes) devolve sem fuso
+        password_changed_at = password_changed_at.replace(tzinfo=timezone.utc)
+    iat = payload.get("iat")
+    return not isinstance(iat, int) or iat < int(password_changed_at.timestamp())
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def decode_access_token(token: str) -> dict | None:

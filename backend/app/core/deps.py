@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, issued_before_password_change
 from app.db.session import get_session
 from app.models import User
 
@@ -23,7 +23,9 @@ async def get_current_user_optional(
     if not payload:
         return None
     user = await session.get(User, int(payload["sub"]))
-    return user if user and user.is_active else None
+    if not user or not user.is_active or issued_before_password_change(payload, user.password_changed_at):
+        return None
+    return user
 
 
 async def get_current_user_any_state(user: Annotated[User | None, Depends(get_current_user_optional)]) -> User:
