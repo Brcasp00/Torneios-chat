@@ -36,7 +36,9 @@ async def get_current_user_any_state(user: Annotated[User | None, Depends(get_cu
 async def get_current_user(user: Annotated[User, Depends(get_current_user_any_state)]) -> User:
     if user.must_change_password:
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Você está com uma senha temporária. Troque a senha em 'Minha conta' para continuar."
+            status.HTTP_403_FORBIDDEN,
+            "Você precisa trocar a sua senha (senha temporária ou mais curta que o mínimo de 8 caracteres). "
+            "Troque a senha em 'Minha conta' para continuar.",
         )
     return user
 

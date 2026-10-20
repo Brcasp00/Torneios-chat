@@ -1,8 +1,10 @@
 import re
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_DEFAULT_JWT_SECRET = "troque-esta-chave-em-producao"
 
 def _asyncpg_url(url: str) -> str:
     url = url.strip().strip("\"'")
@@ -15,10 +17,22 @@ class Settings(BaseSettings):
     database_url: str
     # Opcional: se vazio, deriva de database_url trocando a porta 6543 (transaction pooler) por 5432 (session pooler).
     database_url_migrations: str = ""
-    jwt_secret: str = "troque-esta-chave-em-producao"
+    jwt_secret: str = _DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 60 * 12
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _strong_secret(cls, v: str) -> str:
+        # Com a chave padrão (ou curta) qualquer um poderia fabricar um token de admin: a API se recusa a iniciar.
+        v = v.strip()
+        if v == _DEFAULT_JWT_SECRET or len(v) < 32:
+            raise ValueError(
+                "JWT_SECRET ausente, padrão ou curta demais (mínimo 32 caracteres). Gere uma com: "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        return v
 
     @property
     def async_database_url(self) -> str:

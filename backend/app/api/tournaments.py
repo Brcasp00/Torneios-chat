@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import delete, func, select
 
 from app.core.deps import CurrentUser, OptionalUser, SessionDep, StaffUser
@@ -232,8 +232,8 @@ async def list_tournaments(
     status_: str | None = None,
     q: str | None = None,
     include_sub: bool = False,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1),
+    offset: int = Query(0, ge=0),
 ):
     stmt = select(Tournament).order_by(Tournament.id.desc())
     if not include_sub:

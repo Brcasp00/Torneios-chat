@@ -15,6 +15,7 @@ if _url.startswith("postgresql"):
     # ser desligado, senão aparece "prepared statement ... does not exist" de forma intermitente.
     _url = make_url(_url).update_query_pairs([("prepared_statement_cache_size", "0")]).render_as_string(hide_password=False)
     _kwargs["connect_args"] = {
+        "ssl": "require",  # conexão sempre criptografada (o padrão "prefer" aceitaria cair para texto puro)
         "statement_cache_size": 0,
         "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
     }
