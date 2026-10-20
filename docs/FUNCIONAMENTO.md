@@ -200,6 +200,9 @@ Os modelos prontos montam isso sozinhos:
 
 ### Grupos + mata-mata em detalhe
 - O número de grupos é sugerido pelo total de jogadores (~4 por grupo), mas pode ser escolhido.
+- **Grupos de tamanhos diferentes** são permitidos (ex.: 14 jogadores em 4 grupos = 4, 4, 3 e 3). Os classificados e a
+  posição que vai à repescagem precisam existir **no menor grupo** (com grupos de 3, no máximo 2 classificados), e a
+  criação explica o problema se não existirem. A eliminação vale para quem existe: o grupo de 3 simplesmente não tem 4º.
 - Define-se quantos se classificam por grupo (ex.: 2).
 - **Cruzamento fixo:** grupos pareados (A com B, C com D...). O 1º de um grupo enfrenta o 2º do grupo parceiro
   (1ºA × 2ºB, 1ºB × 2ºA), e as chaves são intercaladas para que jogadores do mesmo grupo só se reencontrem tarde.
