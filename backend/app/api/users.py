@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core import login_guard
 from app.core.deps import AdminUser, SessionDep
-from app.core.security import hash_password_async
+from app.core.security import hash_password_async, now_utc
 from app.models import AuditLog, User
 from app.schemas.user import (
     ActiveIn,
@@ -77,6 +77,7 @@ async def reset_password(user_id: int, data: ResetPasswordIn, admin: AdminUser, 
     temp = data.new_password or secrets.token_urlsafe(9)
     user.password_hash = await hash_password_async(temp)
     user.must_change_password = data.new_password is None  # senha gerada = temporária; definida pelo admin = definitiva
+    user.password_changed_at = now_utc()  # quem estava logado com a senha antiga é desconectado
     login_guard.clear(user.name)  # redefinir a senha também desbloqueia o login
     session.add(AuditLog(actor_id=admin.id, action="user.reset_password", entity="user", entity_id=user.id))
     await session.commit()

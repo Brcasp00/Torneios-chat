@@ -9,7 +9,7 @@ import sys
 
 from sqlalchemy import func, select
 
-from app.core.security import hash_password
+from app.core.security import hash_password, now_utc
 from app.db.session import SessionLocal, engine
 from app.models import User
 from app.schemas.user import _check_password, _clean_name
@@ -21,6 +21,7 @@ async def main(name: str, password: str) -> None:
         if user:
             user.role = "admin"
             user.password_hash = hash_password(password)
+            user.password_changed_at = now_utc()  # sessões abertas com a senha antiga são encerradas
             print(f"Usuário '{user.name}' promovido a admin e senha atualizada.")
         else:
             session.add(User(name=name, password_hash=hash_password(password), role="admin"))

@@ -11,6 +11,7 @@ from app.core.security import (
     hash_password,
     hash_password_async,
     needs_rehash,
+    now_utc,
     verify_password_async,
 )
 from app.models import User
@@ -99,13 +100,18 @@ async def me(user: CurrentUserAnyState):
     return user
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/change-password", response_model=TokenOut)
 async def change_password(data: ChangePasswordIn, user: CurrentUserAnyState, session: SessionDep):
-    """Troca a própria senha. Também libera a conta de quem estava com senha temporária."""
+    """Troca a própria senha. Também libera a conta de quem estava com senha temporária.
+
+    Todos os crachás emitidos antes deixam de valer (outros aparelhos saem); devolve um crachá novo para quem trocou.
+    """
     if not await verify_password_async(data.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Senha atual incorreta.")
     if data.new_password == data.current_password:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A nova senha precisa ser diferente da senha atual.")
     user.password_hash = await hash_password_async(data.new_password)
     user.must_change_password = False
+    user.password_changed_at = now_utc()
     await session.commit()
+    return TokenOut(access_token=create_access_token(user.id, user.role), user=UserOut.model_validate(user))

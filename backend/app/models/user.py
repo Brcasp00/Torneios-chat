@@ -1,4 +1,6 @@
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, Index, String, text
+from datetime import datetime
+
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, BigIntPK, JsonType, TimestampMixin
@@ -19,6 +21,8 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     # Senha temporária (gerada pelo sistema para o usuário): a pessoa precisa trocá-la antes de usar a plataforma.
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Última troca/redefinição de senha: crachás (tokens) emitidos antes disso deixam de valer.
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuditLog(Base, TimestampMixin):

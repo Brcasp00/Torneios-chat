@@ -8,6 +8,52 @@ from app.services import captcha
 from tests.test_auth_users import auth, login, register
 
 
+def _fake_clock(monkeypatch):
+    """Relógio controlado para crachás e trocas de senha (o `iat` tem precisão de segundos)."""
+    from datetime import datetime, timedelta, timezone
+
+    import app.api.auth
+    import app.api.users
+    import app.core.security
+
+    # Começa alguns minutos no passado: o crachá não pode nascer vencido nem "emitido no futuro" (o PyJWT recusa).
+    t = [datetime.now(timezone.utc) - timedelta(minutes=5)]
+    for mod in (app.core.security, app.api.auth, app.api.users):
+        monkeypatch.setattr(mod, "now_utc", lambda: t[0])
+
+    def advance(seconds=10):
+        t[0] += timedelta(seconds=seconds)
+
+    return advance
+
+
+async def test_changing_password_logs_out_other_sessions(client, monkeypatch):
+    advance = _fake_clock(monkeypatch)
+    old = (await register(client)).json()["access_token"]
+    other_device = (await login(client, "Ash", "pikachu1")).json()["access_token"]
+    advance()
+    r = await client.post("/auth/change-password", json={"current_password": "pikachu1", "new_password": "novasenha1"}, headers=auth(old))
+    assert r.status_code == 200
+    new = r.json()["access_token"]
+    # quem trocou continua logado com o crachá novo; os crachás anteriores (outros aparelhos) deixam de valer
+    assert (await client.get("/auth/me", headers=auth(new))).status_code == 200
+    assert (await client.get("/auth/me", headers=auth(old))).status_code == 401
+    assert (await client.get("/auth/me", headers=auth(other_device))).status_code == 401
+    advance()
+    assert (await client.get("/auth/me", headers=auth((await login(client, "Ash", "novasenha1")).json()["access_token"]))).status_code == 200
+
+
+async def test_admin_reset_logs_the_user_out(client, monkeypatch):
+    advance = _fake_clock(monkeypatch)
+    r = await register(client)
+    uid, tok = r.json()["user"]["id"], r.json()["access_token"]
+    adm = (await login(client, "Admin", "admin123")).json()["access_token"]
+    advance()
+    assert (await client.post(f"/users/{uid}/reset-password", json={}, headers=auth(adm))).status_code == 200
+    assert (await client.get("/auth/me", headers=auth(tok))).status_code == 401
+    assert (await client.get("/auth/me", headers=auth(adm))).status_code == 200  # o admin não é afetado
+
+
 async def test_registration_can_be_closed(client, monkeypatch):
     monkeypatch.setattr(get_settings(), "allow_registration", False)
     assert (await client.get("/auth/options")).json() == {"registration_open": False, "turnstile_site_key": None}
@@ -126,7 +172,7 @@ async def test_old_short_password_must_be_changed_and_hash_is_upgraded(client):
     body = {"current_password": "123456", "new_password": "1234567"}
     assert (await client.post("/auth/change-password", json=body, headers=auth(tok))).status_code == 422
     body["new_password"] = "senhaforte1"
-    assert (await client.post("/auth/change-password", json=body, headers=auth(tok))).status_code == 204
+    assert (await client.post("/auth/change-password", json=body, headers=auth(tok))).status_code == 200
     assert (await login(client, "Antigo", "senhaforte1")).json()["user"]["must_change_password"] is False
 
 
