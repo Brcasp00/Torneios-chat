@@ -101,3 +101,25 @@ async def test_change_password(client):
     r = await client.post("/auth/change-password", json={"current_password": "pikachu1", "new_password": "novasenha"}, headers=auth(tok))
     assert r.status_code == 204
     assert (await login(client, "Ash", "novasenha")).status_code == 200
+
+
+async def test_admin_creates_user(client):
+    adm = (await client.post("/auth/login", json={"name": "Admin", "password": "admin123"})).json()["access_token"]
+    h = {"Authorization": f"Bearer {adm}"}
+    # com senha informada
+    r = await client.post("/users", json={"name": "Novo Treinador", "password": "senha123", "role": "organizer"}, headers=h)
+    assert r.status_code == 201 and r.json()["user"]["role"] == "organizer" and r.json()["temporary_password"] is None
+    assert (await client.post("/auth/login", json={"name": "Novo Treinador", "password": "senha123"})).status_code == 200
+    # sem senha: devolve uma temporária que funciona
+    r = await client.post("/users", json={"name": "Sem Senha"}, headers=h)
+    temp = r.json()["temporary_password"]
+    assert r.status_code == 201 and r.json()["user"]["role"] == "player" and temp
+    assert (await client.post("/auth/login", json={"name": "Sem Senha", "password": temp})).status_code == 200
+    # nome repetido (sem diferenciar maiúsculas), nome/senha inválidos
+    assert (await client.post("/users", json={"name": "novo treinador"}, headers=h)).status_code == 409
+    assert (await client.post("/users", json={"name": "ab"}, headers=h)).status_code == 422
+    assert (await client.post("/users", json={"name": "Outro Nome", "password": "123"}, headers=h)).status_code == 422
+    # só admin
+    tok = (await client.post("/auth/login", json={"name": "Novo Treinador", "password": "senha123"})).json()["access_token"]
+    assert (await client.post("/users", json={"name": "Fulano"}, headers={"Authorization": f"Bearer {tok}"})).status_code == 403
+    assert (await client.post("/users", json={"name": "Fulano"})).status_code == 401

@@ -87,14 +87,14 @@ backend/
 
 ### Endpoints atuais (docs interativa em `/docs`)
 - **auth:** `POST /auth/register|login|change-password`, `GET /auth/me`
-- **users:** `GET /users` (público: id+nome), `GET /users/admin`, `POST /users/{id}/reset-password`, `PATCH /users/{id}/role|active`
+- **users:** `GET /users` (público: id+nome), `GET /users/admin`, `POST /users` (admin cria conta; sem senha devolve temporária), `POST /users/{id}/reset-password`, `PATCH /users/{id}/role|active`
 - **tournaments:** `GET /tournaments`, `GET /tournaments/{id}` (detalhe completo: fases, regras, jogadores, subtorneios, `can_manage`), `POST /tournaments`, `POST /tournaments/{id}/subtournaments`, `PATCH /tournaments/{id}`, `PATCH /tournaments/{id}/status`, `DELETE /tournaments/{id}`, `GET|POST /tournaments/{id}/players`, `DELETE /tournaments/{id}/players/{user_id}`, `POST /tournaments/{id}/withdraw`, `PUT /tournaments/{id}/rules/{rule_id}/subtournament`, `POST /tournaments/{id}/rounds/postpone|resume`
 - **play:** `PUT /tournaments/{id}/pots`, `POST /tournaments/{id}/draw` (prévia: `seed`, `use_pots`, `arrangement`), `POST /tournaments/{id}/start` (mesmos campos), `GET /tournaments/{id}/draw` (registro do sorteio), `GET /tournaments/{id}/matches|standings|bracket|history`, `GET /tournaments/{id}/history/rounds|stages`, `GET /tournaments/{id}/history/{snapshot_id}`
 - **matches:** `GET /matches/{id}`, `POST /matches/{id}/report|validate|reject|result|walkover|invalidate|postpone|resume`
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 8 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento). 88 testes passando. Migrations 0001–0003 aplicadas no Supabase; a **0004** (colunas novas em `matches` e `standings_snapshots`) é aplicada pelo Render no próximo start. Back-end implantado no Render.
+**Concluído:** Fases 1 a 8 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento). 89 testes passando. Migrations 0001–0003 aplicadas no Supabase; a **0004** (colunas novas em `matches` e `standings_snapshots`) é aplicada pelo Render no próximo start. Back-end implantado no Render.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, e repescagem em subtorneio (entrada automática dos candidatos e retorno ao mata-mata principal).
 
 ## Histórico de fases

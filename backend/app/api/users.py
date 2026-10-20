@@ -1,13 +1,16 @@
 import secrets
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.deps import AdminUser, SessionDep
 from app.core.security import hash_password
 from app.models import AuditLog, User
 from app.schemas.user import (
     ActiveIn,
+    AdminCreateUserIn,
+    AdminCreateUserOut,
     ResetPasswordIn,
     ResetPasswordOut,
     RoleIn,
@@ -38,6 +41,27 @@ async def list_users(session: SessionDep, q: str | None = None, limit: int = 100
 @router.get("/admin", response_model=list[UserOut])
 async def list_users_admin(_: AdminUser, session: SessionDep):
     return (await session.scalars(select(User).order_by(User.name))).all()
+
+
+@router.post("", response_model=AdminCreateUserOut, status_code=status.HTTP_201_CREATED)
+async def create_user(data: AdminCreateUserIn, admin: AdminUser, session: SessionDep):
+    """Admin cria uma conta (com o papel escolhido). Sem senha informada, devolve uma temporária uma única vez."""
+    if await session.scalar(select(User.id).where(func.lower(User.name) == data.name.lower())):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um usuário com esse nome.")
+    password = data.password or secrets.token_urlsafe(9)
+    user = User(name=data.name, password_hash=hash_password(password), role=data.role)
+    session.add(user)
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um usuário com esse nome.")
+    session.add(
+        AuditLog(actor_id=admin.id, action="user.create", entity="user", entity_id=user.id, data={"name": user.name, "role": user.role})
+    )
+    await session.commit()
+    await session.refresh(user)
+    return AdminCreateUserOut(user=UserOut.model_validate(user), temporary_password=None if data.password else password)
 
 
 @router.post("/{user_id}/reset-password", response_model=ResetPasswordOut)
