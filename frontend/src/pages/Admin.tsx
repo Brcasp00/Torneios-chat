@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, type AuditItem, type Role, type User } from "../api";
 import { useAuth } from "../auth";
 import { ErrorBox, Loading, Tabs, useAction } from "../components/ui";
@@ -25,6 +26,16 @@ function Users() {
   const [q, setQ] = useState("");
   const [temp, setTemp] = useState<string | null>(null);
 
+  // Aviso vindo da página "Criar usuário" (que volta para cá ao terminar).
+  const loc = useLocation();
+  const nav = useNavigate();
+  const [created, setCreated] = useState(
+    (loc.state as { created?: { name: string; role: Role; temporary_password: string | null } } | null)?.created ?? null,
+  );
+  useEffect(() => {
+    if (created) nav(loc.pathname, { replace: true, state: null }); // evita repetir o aviso ao recarregar a página
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const change = async (fn: () => Promise<unknown>, ok?: string) => { if (await run(fn, ok)) await list.reload(); };
   const reset = async (u: User) => {
     if (!confirm(`Gerar uma senha temporária para ${u.name}?`)) return;
@@ -39,10 +50,19 @@ function Users() {
   return (
     <>
       <ErrorBox error={list.error} />
-      <CreateUser onCreated={() => void list.reload()} onTemp={setTemp} />
+      <div className="row between" style={{ marginBottom: "1rem" }}>
+        <input style={{ maxWidth: 280 }} placeholder="Buscar usuário" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Link className="btn primary" to="/admin/usuarios/novo">Criar usuário</Link>
+      </div>
+      {created && (
+        <div className={`alert ${created.temporary_password ? "warn" : "ok"}`}>
+          Usuário <strong>{created.name}</strong> criado como {roleLabel[created.role].toLowerCase()}.
+          {created.temporary_password && <> Senha temporária: <strong>{created.temporary_password}</strong>. Envie por um canal seguro; ela não será mostrada de novo. A pessoa pode trocá-la em "Minha conta".</>}
+          {" "}<button className="btn small ghost" onClick={() => setCreated(null)}>Fechar</button>
+        </div>
+      )}
       {box}
       {temp && <div className="alert warn">Senha temporária — <strong>{temp}</strong>. Envie ao usuário por um canal seguro; ela não será mostrada de novo.</div>}
-      <input style={{ maxWidth: 280, marginBottom: "1rem" }} placeholder="Buscar usuário" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="card table-wrap">
         <table>
           <thead><tr><th>Nome</th><th>Papel</th><th>Conta</th><th>Cadastro</th><th></th></tr></thead>
@@ -72,46 +92,6 @@ function Users() {
         </table>
       </div>
     </>
-  );
-}
-
-function CreateUser({ onCreated, onTemp }: { onCreated: () => void; onTemp: (t: string | null) => void }) {
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("player");
-  const { run, busy, box } = useAction();
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const ok = await run(async () => {
-      const r = await api<{ user: User; temporary_password: string | null }>("/users", {
-        body: { name, role, password: password || null },
-      });
-      onTemp(r.temporary_password ? `${r.user.name}: ${r.temporary_password}` : null);
-    }, `Usuário "${name}" criado como ${roleLabel[role].toLowerCase()}.`);
-    if (ok) {
-      setName("");
-      setPassword("");
-      setRole("player");
-      onCreated();
-    }
-  };
-
-  return (
-    <form className="card" onSubmit={submit}>
-      <h2>Criar usuário</h2>
-      {box}
-      <div className="form-grid">
-        <div className="field"><label htmlFor="cu-name">Nome de treinador</label><input id="cu-name" value={name} onChange={(e) => setName(e.target.value)} required minLength={3} maxLength={32} /></div>
-        <div className="field"><label htmlFor="cu-role">Papel</label>
-          <select id="cu-role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            {Object.entries(roleLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </div>
-        <div className="field"><label htmlFor="cu-pw">Senha (vazio = gerar temporária)</label><input id="cu-pw" type="text" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} autoComplete="off" /></div>
-      </div>
-      <button className="btn primary" disabled={busy}>{busy ? "Criando…" : "Criar usuário"}</button>
-    </form>
   );
 }
 

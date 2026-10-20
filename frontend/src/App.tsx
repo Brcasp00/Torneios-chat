@@ -5,6 +5,7 @@ import { roleLabel } from "./labels";
 import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 import CreateTournament from "./pages/CreateTournament";
+import CreateUser from "./pages/CreateUser";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import MatchPage from "./pages/MatchPage";
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/matches/:id" element={<MatchPage />} />
           <Route path="/conta" element={<RequireAuth><Account /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />
+          <Route path="/admin/usuarios/novo" element={<RequireAuth admin><CreateUser /></RequireAuth>} />
           <Route path="*" element={<div className="alert">Página não encontrada. <Link to="/">Voltar ao início</Link></div>} />
         </Routes>
       </main>
