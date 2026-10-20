@@ -79,6 +79,10 @@ class MatchOut(BaseModel):
     has_pending_report: bool = False
     postponed: bool = False
     postponed_reason: str | None = None
+    deadline: datetime | None = None  # fim do prazo da rodada deste confronto, se definido
+    overdue: bool = False  # prazo vencido e ainda sem resultado/reporte (aviso para o admin)
+    auto_result: bool = False  # empate marcado automaticamente por vencimento do prazo
+    deadline_waived: bool = False  # admin liberou a entrega atrasada
 
 
 class MatchDetail(MatchOut):
@@ -238,3 +242,9 @@ class BracketStage(BaseModel):
     rounds: list[BracketRound]
     third_place: MatchOut | None = None
     champion: PlayerRef | None = None
+
+
+class DeadlinesIn(BaseModel):
+    """Prazos por rodada: {"1": "2026-11-01T21:00:00-03:00", "2": null}. null remove o prazo da rodada."""
+
+    deadlines: dict[int, datetime | None]

@@ -43,6 +43,7 @@ class UserOut(BaseModel):
     role: Role
     is_active: bool
     created_at: datetime
+    must_change_password: bool = False
 
 
 class UserPublic(BaseModel):
@@ -76,6 +77,26 @@ class ResetPasswordIn(BaseModel):
 
 class ResetPasswordOut(BaseModel):
     user_id: int
+    temporary_password: str | None = None
+
+
+class AdminCreateUserIn(BaseModel):
+    """Criação de conta por um admin. Sem senha, o servidor gera uma temporária."""
+
+    name: str
+    password: str | None = None
+    role: Role = "player"
+
+    _n = field_validator("name")(_clean_name)
+
+    @field_validator("password")
+    @classmethod
+    def _p(cls, v):
+        return None if v is None else _check_password(v)
+
+
+class AdminCreateUserOut(BaseModel):
+    user: UserOut
     temporary_password: str | None = None
 
 

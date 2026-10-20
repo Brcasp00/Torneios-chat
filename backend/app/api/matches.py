@@ -15,7 +15,7 @@ from app.schemas.match import (
     ValidateIn,
     WalkoverIn,
 )
-from app.services import results
+from app.services import deadlines, results
 from app.services.views import matches_out
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -87,6 +87,8 @@ async def _detail(session, m: Match, t: Tournament, stage: Stage, user: User | N
 
 @router.get("/{match_id}", response_model=MatchDetail)
 async def get_match(match_id: int, session: SessionDep, user: OptionalUser):
+    m, t, stage = await _load(session, match_id)
+    await deadlines.safe_sweep(session, t)
     m, t, stage = await _load(session, match_id)
     return await _detail(session, m, t, stage, user)
 
@@ -235,6 +237,8 @@ async def invalidate(match_id: int, data: NoteIn, user: StaffUser, session: Sess
     if m.status != "validated":
         raise HTTPException(status.HTTP_409_CONFLICT, "Só é possível invalidar um resultado já validado.")
     old_outcome = results.outcome(m)
+    if m.auto_result:  # empate automático por prazo invalidado: o prazo deixa de valer para este jogo (entrega atrasada liberada)
+        m.deadline_waived = True
     results.clear_result(m)
     old = await session.scalars(select(MatchReport).where(MatchReport.match_id == m.id, MatchReport.status == "validated"))
     for r in old:
@@ -272,6 +276,7 @@ async def resume_match(match_id: int, user: StaffUser, session: SessionDep):
     _staff_guard(user, t)
     if not results.resume(m):
         raise HTTPException(status.HTTP_409_CONFLICT, "Este confronto não está adiado ou já foi disputado.")
+    deadlines.waive_if_overdue(stage, m)  # retomado depois do prazo: será disputado, não empatado
     _log(session, user, "match.resume", m)
     await results.recalc(session, t, stage, f"Adiamento do confronto #{m.id} removido", m.id)
     await session.commit()

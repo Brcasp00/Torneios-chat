@@ -11,6 +11,7 @@ from app.schemas.match import (
     Arrangement,
     BracketRound,
     BracketStage,
+    DeadlinesIn,
     DrawIn,
     DrawMatch,
     DrawOut,
@@ -28,9 +29,9 @@ from app.schemas.match import (
     StageStandings,
     StandingRow,
 )
-from app.services import bracket, results, schedule, tables
+from app.services import bracket, deadlines, results, schedule, tables
 from app.services import stages as stage_service
-from app.schemas.tournament import PlayerOut
+from app.schemas.tournament import PlayerOut, StageOut
 from app.services.views import matches_out
 
 router = APIRouter(prefix="/tournaments", tags=["play"])
@@ -205,7 +206,8 @@ async def list_matches(
     status_: str | None = None,
     postponed: bool | None = None,
 ):
-    await _get_or_404(session, tournament_id)
+    t = await _get_or_404(session, tournament_id)
+    await deadlines.safe_sweep(session, t)
     stmt = select(Match).where(Match.tournament_id == tournament_id).order_by(Match.stage_id, Match.round, Match.slot, Match.id)
     if stage_id:
         stmt = stmt.where(Match.stage_id == stage_id)
@@ -224,6 +226,7 @@ async def list_matches(
 async def standings_view(tournament_id: int, session: SessionDep):
     """Tabelas de classificação: uma por fase de pontos corridos, ou uma por grupo nas fases de grupos."""
     t = await _get_or_404(session, tournament_id)
+    await deadlines.safe_sweep(session, t)
     stages = (
         await session.scalars(
             select(Stage).where(Stage.tournament_id == t.id, Stage.type.in_(("league", "groups"))).order_by(Stage.position)
@@ -360,6 +363,9 @@ async def _round_action(session, tournament_id: int, data: RoundPostponeIn, user
     if not ms:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Rodada não encontrada nesta fase.")
     changed = [m for m in ms if (results.postpone(m, user.id, data.reason) if postpone else results.resume(m))]
+    if not postpone:
+        for m in changed:
+            deadlines.waive_if_overdue(stage, m)
     if not changed:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -397,7 +403,8 @@ async def resume_round(tournament_id: int, data: RoundPostponeIn, user: StaffUse
 @router.get("/{tournament_id}/bracket", response_model=list[BracketStage])
 async def bracket_view(tournament_id: int, session: SessionDep):
     """Chaveamento de cada fase de mata-mata, por rodada (público)."""
-    await _get_or_404(session, tournament_id)
+    t = await _get_or_404(session, tournament_id)
+    await deadlines.safe_sweep(session, t)
     stages = (
         await session.scalars(
             select(Stage).where(Stage.tournament_id == tournament_id, Stage.type == "knockout").order_by(Stage.position)
@@ -423,3 +430,41 @@ async def bracket_view(tournament_id: int, session: SessionDep):
             champion = views[final.id].player1 if final.winner_id == final.player1_id else views[final.id].player2
         out.append(BracketStage(stage_id=s.id, stage_name=s.name, status=s.status, rounds=rounds, third_place=third, champion=champion))
     return out
+
+
+# ---------- prazo das rodadas ----------
+@router.put("/{tournament_id}/stages/{stage_id}/deadlines", response_model=StageOut)
+async def set_stage_deadlines(tournament_id: int, stage_id: int, data: DeadlinesIn, user: StaffUser, session: SessionDep):
+    """Define (ou remove, com null) a data-limite de cada rodada de uma fase.
+
+    Vencido o prazo, em liga/grupos (se o torneio permitir empate) os jogos sem resultado viram empate automático;
+    nas demais fases o confronto só ganha o aviso de prazo vencido. Datas passadas só são aceitas se não mudarem.
+    """
+    t = await _get_or_404(session, tournament_id)
+    _require_manage(user, t)
+    stage = await session.get(Stage, stage_id)
+    if not stage or stage.tournament_id != t.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fase não encontrada neste torneio.")
+    if t.status in ("finished", "cancelled"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "O torneio já foi encerrado.")
+    current = deadlines.parse_deadlines(stage.config)
+    at = deadlines.now()
+    for rnd, when in data.deadlines.items():
+        if not 1 <= rnd <= deadlines.MAX_ROUND:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Rodada inválida: {rnd}.")
+        if when is not None:
+            when = when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+            if when <= at and current.get(rnd) != when:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    f"O prazo da rodada {rnd} precisa estar no futuro (uma data já passada marcaria os jogos como empate na hora).",
+                )
+    deadlines.set_deadlines(stage, data.deadlines)
+    session.add(
+        AuditLog(
+            actor_id=user.id, action="stage.set_deadlines", entity="tournament", entity_id=t.id,
+            data={"stage_id": stage.id, "deadlines": {str(r): (w.isoformat() if w else None) for r, w in data.deadlines.items()}},
+        )
+    )
+    await session.commit()
+    return stage

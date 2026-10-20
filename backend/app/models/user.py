@@ -17,6 +17,8 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(16), default="player", server_default="player")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # Senha temporária (gerada pelo sistema para o usuário): a pessoa precisa trocá-la antes de usar a plataforma.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class AuditLog(Base, TimestampMixin):

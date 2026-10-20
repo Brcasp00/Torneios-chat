@@ -40,6 +40,8 @@ O usuário organiza, com amigos, torneios de **Pokémon competitivo** (maioria d
 
 Admin não pode rebaixar nem desativar a si mesmo. Admin reseta a senha (não há e-mail). Cadastro aberto a qualquer pessoa (vira `player`). O primeiro admin é criado por `python -m app.scripts.create_admin "Nome"`.
 
+**Senha temporária:** quando o admin cria um usuário sem informar senha, ou redefine a senha sem informar uma nova, o sistema gera uma senha temporária e marca `users.must_change_password` (migration 0005). Enquanto a marca existir, o login funciona, mas toda a API (exceto `GET /auth/me` e `POST /auth/change-password`) devolve 403 com a mensagem de troca obrigatória; ao trocar (a nova deve ser diferente da atual) a marca cai. Senha definida pelo próprio admin não é temporária.
+
 ## Regras de negócio decididas com o usuário
 
 - **Torneio = sequência de fases** (`stages`) + **regras de passagem** (`advancement_rules`: "da fase X, posições A–B vão para a fase Y a partir da vaga N / eliminados / repescagem / torneio principal"). Modelos prontos (`league`, `knockout`, `groups_knockout`) só geram fases/regras; `custom` permite montar qualquer coisa (ex.: 20 jogadores → rodada única de 10 confrontos; 6 melhores vencedores por saldo direto ao mata-mata; 4 piores jogam playoff; 2 vencedores completam as 8 vagas).
@@ -62,6 +64,7 @@ Admin não pode rebaixar nem desativar a si mesmo. Admin reseta a senha (não h�
 - **Início do torneio** só via `POST /tournaments/{id}/start` e **com exatamente `max_players` inscritos**. Jogador que desiste antes do início é removido da lista.
 - **Histórico:** cada mudança relevante salva um snapshot da tabela (`standings_snapshots`, `kind="change"`). Admin pode corrigir/invalidar resultados a qualquer momento (irregularidades); tudo é recalculado e registrado em `audit_log`. Além disso (`services/history.py`): **`kind="round"`** = tabela congelada quando uma rodada de pontos corridos/grupos fecha (uma por rodada, todas consultáveis; a tabela traz `played` por jogador para ver quem tem jogo a menos); **`kind="final"`** = estado final de cada fase (grupos, liga, mata-mata com `ranking`, rodada/playoff, e as fases dos subtorneios), regravado como nova versão se uma correção posterior o alterar (`versions`). Consultas públicas: `GET /tournaments/{id}/history/rounds[?stage_id=]`, `/history/stages` (inclui subtorneios), `/history?kind=`.
 - **Adiamento (só pontos corridos/grupos, só admin/organizador do torneio):** adia um jogo (`POST /matches/{id}/postpone`) ou os jogos pendentes de uma rodada (`POST /tournaments/{id}/rounds/postpone` com `stage_id`, `round`, `group_label` opcional, `reason`); `resume` desfaz enquanto o jogo não foi disputado. O jogo adiado **continua podendo ser reportado**; a fase e o torneio **não encerram** enquanto houver jogo pendente (e `PATCH status=finished` retorna 409). Uma rodada "fecha" para o histórico quando seus jogos estão validados/anulados ou adiados; o snapshot dela registra `postponed` (pendentes) e **nunca é alterado depois**. O jogo adiado, quando disputado, entra na tabela do próximo snapshot que fechar (`played_postponed`, com `original_round`) ou no estado final. Se uma rodada fechada voltar a ter jogo em aberto (invalidação/retomada) o snapshot ganha `reopened=true` e, ao fechar de novo, é criado um novo.
+- **Prazo das rodadas (`services/deadlines.py`):** admin/organizador define a data-limite de cada rodada, uma a uma (`PUT /tournaments/{id}/stages/{stage_id}/deadlines` com `{"deadlines": {"1": "<ISO com fuso>", "2": null}}`, null remove; data já passada é recusada com 422; fica em `stage.config.deadlines`). Vencido o prazo: em **liga/grupos** de torneio que **permite empate**, os jogos ainda `scheduled` (sem reporte, não adiados, não liberados) viram **empate 0x0 automático** (`matches.auto_result`, audit `match.auto_draw` com ator nulo, tabela recalculada). **Invalidar** esse empate marca `deadline_waived` e o jogo pode ser entregue atrasado (o prazo não age mais nele); retomar um jogo adiado depois do prazo também o libera. Em mata-mata/rodada única/playoff, ou em torneio sem empate, nada é decidido: o confronto só vem com `overdue=true` (aviso para o admin). Jogo com reporte pendente nunca é empatado. A verificação roda numa tarefa a cada 60 s (lifespan do FastAPI) **e** na leitura do torneio/confrontos/tabela/chaveamento/confronto, porque o plano gratuito do Render dorme. `MatchOut` ganhou `deadline`, `overdue`, `auto_result`, `deadline_waived`. Migration 0006.
 - **Regras de batalha:** campos estruturados (`battle_rules`: formato, jogo, tier, team_size, bring, level_cap, timer, clauses, showdown_required) + texto livre (`rules_text`).
 
 ## Arquitetura (back-end)
@@ -77,8 +80,8 @@ backend/
     api/     auth.py users.py tournaments.py play.py matches.py
     services/ templates.py schedule.py bracket.py stages.py tables.py engine.py standings.py results.py views.py
     scripts/ create_admin.py
-  alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py
-  tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py test_history.py test_audit.py   # SQLite em memória
+  alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py  0005_senha_temporaria.py  0006_prazo_das_rodadas.py
+  tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py test_history.py test_audit.py test_deadlines.py   # SQLite em memória
 ```
 
 - Testes usam **SQLite** (`JsonType` → JSON; `BigIntPK` → INTEGER). Nunca apontam para o banco real.
@@ -87,14 +90,14 @@ backend/
 
 ### Endpoints atuais (docs interativa em `/docs`)
 - **auth:** `POST /auth/register|login|change-password`, `GET /auth/me`
-- **users:** `GET /users` (público: id+nome), `GET /users/admin`, `POST /users/{id}/reset-password`, `PATCH /users/{id}/role|active`
+- **users:** `GET /users` (público: id+nome), `GET /users/admin`, `POST /users` (admin cria conta; sem senha devolve temporária e marca `must_change_password`), `POST /users/{id}/reset-password`, `PATCH /users/{id}/role|active`
 - **tournaments:** `GET /tournaments`, `GET /tournaments/{id}` (detalhe completo: fases, regras, jogadores, subtorneios, `can_manage`), `POST /tournaments`, `POST /tournaments/{id}/subtournaments`, `PATCH /tournaments/{id}`, `PATCH /tournaments/{id}/status`, `DELETE /tournaments/{id}`, `GET|POST /tournaments/{id}/players`, `DELETE /tournaments/{id}/players/{user_id}`, `POST /tournaments/{id}/withdraw`, `PUT /tournaments/{id}/rules/{rule_id}/subtournament`, `POST /tournaments/{id}/rounds/postpone|resume`
 - **play:** `PUT /tournaments/{id}/pots`, `POST /tournaments/{id}/draw` (prévia: `seed`, `use_pots`, `arrangement`), `POST /tournaments/{id}/start` (mesmos campos), `GET /tournaments/{id}/draw` (registro do sorteio), `GET /tournaments/{id}/matches|standings|bracket|history`, `GET /tournaments/{id}/history/rounds|stages`, `GET /tournaments/{id}/history/{snapshot_id}`
 - **matches:** `GET /matches/{id}`, `POST /matches/{id}/report|validate|reject|result|walkover|invalidate|postpone|resume`
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 8 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento). 88 testes passando. Migrations 0001–0003 aplicadas no Supabase; a **0004** (colunas novas em `matches` e `standings_snapshots`) é aplicada pelo Render no próximo start. Back-end implantado no Render.
+**Concluído:** Fases 1 a 8 (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento). 94 testes passando. Migrations 0001–0003 aplicadas no Supabase; a **0004** (colunas novas em `matches` e `standings_snapshots`) é aplicada pelo Render no próximo start. Back-end implantado no Render.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, e repescagem em subtorneio (entrada automática dos candidatos e retorno ao mata-mata principal).
 
 ## Histórico de fases

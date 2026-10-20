@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.core.deps import CurrentUser, SessionDep
+from app.core.deps import CurrentUserAnyState, SessionDep
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models import User
 from app.schemas.user import ChangePasswordIn, LoginIn, RegisterIn, TokenOut, UserOut
@@ -40,13 +40,17 @@ async def login(data: LoginIn, session: SessionDep):
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: CurrentUser):
+async def me(user: CurrentUserAnyState):
     return user
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
-async def change_password(data: ChangePasswordIn, user: CurrentUser, session: SessionDep):
+async def change_password(data: ChangePasswordIn, user: CurrentUserAnyState, session: SessionDep):
+    """Troca a própria senha. Também libera a conta de quem estava com senha temporária."""
     if not verify_password(data.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Senha atual incorreta.")
+    if data.new_password == data.current_password:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A nova senha precisa ser diferente da senha atual.")
     user.password_hash = hash_password(data.new_password)
+    user.must_change_password = False
     await session.commit()

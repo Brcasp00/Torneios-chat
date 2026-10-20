@@ -26,13 +26,23 @@ async def get_current_user_optional(
     return user if user and user.is_active else None
 
 
-async def get_current_user(user: Annotated[User | None, Depends(get_current_user_optional)]) -> User:
+async def get_current_user_any_state(user: Annotated[User | None, Depends(get_current_user_optional)]) -> User:
+    """Usuário autenticado, mesmo que ainda precise trocar a senha temporária (usado só em /auth/me e /auth/change-password)."""
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Não autenticado.", headers={"WWW-Authenticate": "Bearer"})
     return user
 
 
+async def get_current_user(user: Annotated[User, Depends(get_current_user_any_state)]) -> User:
+    if user.must_change_password:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Você está com uma senha temporária. Troque a senha em 'Minha conta' para continuar."
+        )
+    return user
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUserAnyState = Annotated[User, Depends(get_current_user_any_state)]
 OptionalUser = Annotated[User | None, Depends(get_current_user_optional)]
 
 

@@ -101,3 +101,62 @@ async def test_change_password(client):
     r = await client.post("/auth/change-password", json={"current_password": "pikachu1", "new_password": "novasenha"}, headers=auth(tok))
     assert r.status_code == 204
     assert (await login(client, "Ash", "novasenha")).status_code == 200
+
+
+async def test_admin_creates_user(client):
+    adm = (await client.post("/auth/login", json={"name": "Admin", "password": "admin123"})).json()["access_token"]
+    h = {"Authorization": f"Bearer {adm}"}
+    # com senha informada
+    r = await client.post("/users", json={"name": "Novo Treinador", "password": "senha123", "role": "organizer"}, headers=h)
+    assert r.status_code == 201 and r.json()["user"]["role"] == "organizer" and r.json()["temporary_password"] is None
+    assert (await client.post("/auth/login", json={"name": "Novo Treinador", "password": "senha123"})).status_code == 200
+    # sem senha: devolve uma temporária que funciona
+    r = await client.post("/users", json={"name": "Sem Senha"}, headers=h)
+    temp = r.json()["temporary_password"]
+    assert r.status_code == 201 and r.json()["user"]["role"] == "player" and temp
+    assert (await client.post("/auth/login", json={"name": "Sem Senha", "password": temp})).status_code == 200
+    # nome repetido (sem diferenciar maiúsculas), nome/senha inválidos
+    assert (await client.post("/users", json={"name": "novo treinador"}, headers=h)).status_code == 409
+    assert (await client.post("/users", json={"name": "ab"}, headers=h)).status_code == 422
+    assert (await client.post("/users", json={"name": "Outro Nome", "password": "123"}, headers=h)).status_code == 422
+    # só admin
+    tok = (await client.post("/auth/login", json={"name": "Novo Treinador", "password": "senha123"})).json()["access_token"]
+    assert (await client.post("/users", json={"name": "Fulano"}, headers={"Authorization": f"Bearer {tok}"})).status_code == 403
+    assert (await client.post("/users", json={"name": "Fulano"})).status_code == 401
+
+
+async def test_temporary_password_forces_change(client):
+    h = lambda t: {"Authorization": f"Bearer {t}"}  # noqa: E731
+    adm = (await client.post("/auth/login", json={"name": "Admin", "password": "admin123"})).json()["access_token"]
+    r = await client.post("/users", json={"name": "Temporario"}, headers=h(adm))
+    temp = r.json()["temporary_password"]
+    assert r.json()["user"]["must_change_password"] is True
+
+    login = (await client.post("/auth/login", json={"name": "Temporario", "password": temp})).json()
+    assert login["user"]["must_change_password"] is True
+    tok = login["access_token"]
+    # /auth/me continua funcionando e informa a pendência; o resto fica bloqueado com mensagem clara
+    assert (await client.get("/auth/me", headers=h(tok))).json()["must_change_password"] is True
+    r = await client.post("/tournaments/1/withdraw", headers=h(tok))
+    assert r.status_code == 403 and "senha temporária" in r.json()["detail"]
+    r = await client.post("/tournaments", json={"name": "Teste", "template": "league", "max_players": 4}, headers=h(tok))
+    assert r.status_code == 403
+
+    # trocar: a nova precisa ser diferente; depois libera tudo
+    r = await client.post("/auth/change-password", json={"current_password": temp, "new_password": temp}, headers=h(tok))
+    assert r.status_code == 400
+    r = await client.post("/auth/change-password", json={"current_password": temp, "new_password": "minhasenha1"}, headers=h(tok))
+    assert r.status_code == 204
+    assert (await client.get("/auth/me", headers=h(tok))).json()["must_change_password"] is False
+    assert (await client.post("/tournaments/1/withdraw", headers=h(tok))).status_code != 403
+
+    # senha definida pelo admin não é temporária; reset sem senha volta a exigir a troca
+    r = await client.post("/users", json={"name": "Definida", "password": "senha123"}, headers=h(adm))
+    assert r.json()["user"]["must_change_password"] is False
+    uid = r.json()["user"]["id"]
+    assert (await client.post(f"/users/{uid}/reset-password", json={}, headers=h(adm))).status_code == 200
+    users = (await client.get("/users/admin", headers=h(adm))).json()
+    assert next(u for u in users if u["id"] == uid)["must_change_password"] is True
+    assert (await client.post(f"/users/{uid}/reset-password", json={"new_password": "outra123"}, headers=h(adm))).status_code == 200
+    users = (await client.get("/users/admin", headers=h(adm))).json()
+    assert next(u for u in users if u["id"] == uid)["must_change_password"] is False
