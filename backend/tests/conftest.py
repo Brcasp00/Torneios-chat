@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # no
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 import app.models  # noqa: E402,F401
+from app.core import login_guard  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_session  # noqa: E402
@@ -29,6 +30,7 @@ async def client():
             yield s
 
     app.dependency_overrides[get_session] = override
+    login_guard.reset()  # bloqueios de login ficam na memória: cada teste começa do zero
     async with maker() as s:
         s.add(User(name="Admin", password_hash=hash_password("admin123"), role="admin"))
         await s.commit()

@@ -1,9 +1,10 @@
 import secrets
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from app.core import login_guard
 from app.core.deps import AdminUser, SessionDep
 from app.core.security import hash_password
 from app.models import AuditLog, User
@@ -29,7 +30,9 @@ async def _get_or_404(session, user_id: int) -> User:
 
 
 @router.get("", response_model=list[UserPublic])
-async def list_users(session: SessionDep, q: str | None = None, limit: int = 100, offset: int = 0):
+async def list_users(
+    session: SessionDep, q: str | None = None, limit: int = Query(100, ge=1), offset: int = Query(0, ge=0)
+):
     """Lista pública (somente id e nome), usada para busca ao inscrever jogadores."""
     stmt = select(User).where(User.is_active.is_(True)).order_by(User.name)
     if q:
@@ -71,6 +74,7 @@ async def reset_password(user_id: int, data: ResetPasswordIn, admin: AdminUser, 
     temp = data.new_password or secrets.token_urlsafe(9)
     user.password_hash = hash_password(temp)
     user.must_change_password = data.new_password is None  # senha gerada = temporária; definida pelo admin = definitiva
+    login_guard.clear(user.name)  # redefinir a senha também desbloqueia o login
     session.add(AuditLog(actor_id=admin.id, action="user.reset_password", entity="user", entity_id=user.id))
     await session.commit()
     return ResetPasswordOut(user_id=user.id, temporary_password=None if data.new_password else temp)

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from app.core import login_guard
 from app.core.deps import CurrentUserAnyState, SessionDep
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models import User
@@ -32,10 +33,20 @@ async def register(data: RegisterIn, session: SessionDep):
 @router.post("/login", response_model=TokenOut)
 async def login(data: LoginIn, session: SessionDep):
     name = " ".join(data.name.split())
+    wait = login_guard.locked_for(name)
+    if wait:
+        minutes = (wait + 59) // 60
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"Muitas tentativas erradas. O login desta conta está bloqueado; tente de novo em {minutes} minuto(s).",
+            headers={"Retry-After": str(wait)},
+        )
     user = await session.scalar(select(User).where(func.lower(User.name) == name.lower()))
     ok = verify_password(data.password, user.password_hash if user else _DUMMY_HASH)
     if not user or not ok or not user.is_active:
+        login_guard.failure(name)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Nome ou senha inválidos.")
+    login_guard.success(name)
     return TokenOut(access_token=create_access_token(user.id, user.role), user=UserOut.model_validate(user))
 
 

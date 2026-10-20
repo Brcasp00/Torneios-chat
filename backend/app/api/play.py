@@ -1,7 +1,7 @@
 """Rotas por torneio: sorteio, início, confrontos, tabelas, chaveamento e histórico."""
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from app.api.tournaments import _counts, _get_or_404, _players_out, _require_manage, can_manage  # noqa: F401
@@ -248,7 +248,8 @@ async def standings_view(tournament_id: int, session: SessionDep):
 
 @router.get("/{tournament_id}/history", response_model=list[SnapshotOut])
 async def history(
-    tournament_id: int, session: SessionDep, stage_id: int | None = None, kind: str | None = None, limit: int = 100
+    tournament_id: int, session: SessionDep, stage_id: int | None = None, kind: str | None = None,
+    limit: int = Query(100, ge=1),
 ):
     """Todos os registros do torneio (mais recentes primeiro). `kind`: change | round | final."""
     await _get_or_404(session, tournament_id)
