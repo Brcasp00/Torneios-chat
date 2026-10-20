@@ -1,18 +1,30 @@
 # CLAUDE.md — Plataforma de Torneios Pokémon
 
-> Documento vivo. **Ao concluir cada fase, atualize as seções "Estado atual", "Histórico de fases" e "Próxima fase" antes de seguir adiante.**
+> Documento vivo. **Ao concluir cada fase (ou qualquer mudança relevante), atualize as seções "Estado atual", "Histórico de fases" e "Próxima fase" antes de seguir adiante.**
+
+## Resumo rápido (leia primeiro)
+
+- **O que é:** plataforma web, em português, para organizar torneios de Pokémon competitivo (Showdown) entre amigos. Público vê tudo; ações exigem login. Dezenas de usuários.
+- **Está no ar:** front **React/Vite no Netlify**, API **FastAPI no Render**, banco **Postgres no Supabase**. As três peças seguem a branch **`main`**. O banco do Supabase é **o mesmo** usado nos testes locais com `py main.py` (cuidado ao criar/apagar dados).
+- **Branches:** `main` = produção; `Back-end` = trabalho de `backend/`; `front-end` = trabalho de `frontend/`, `main.py` e docs. Fluxo e armadilhas na seção "Fluxo de trabalho e armadilhas".
+- **Fases 1–9 concluídas**, mais melhorias posteriores (ver "Histórico de fases" e "Estado atual"). A Fase 10 (polimento) está em andamento.
+- **Usuários de teste no banco real:** `teste1`–`teste14` e `testea` (jogadores; `teste5`–`teste14` com senha `123456`, criados só para simular torneios). **Desativar/apagar antes de uso real**, pois a API é pública. O admin é `Arlen`.
 
 ## Regras de trabalho (obrigatórias)
 
 1. **Back-end → GitHub automaticamente.** Toda modificação feita no back-end (`backend/`) deve ser commitada e enviada (`git push`) para a branch **`Back-end`** de https://github.com/Brcasp00/Torneios-chat (atenção: o nome real da branch tem **B maiúsculo**: `Back-end`). Faça isso sem precisar pedir confirmação, ao final de cada conjunto coerente de mudanças (e sempre ao fechar uma fase), com os testes passando.
 2. **`main` = produção.** A `main` só recebe código por **merge/Pull Request de `Back-end` (e `front-end`) feito quando o usuário pedir**. Nunca dê push direto na `main` por conta própria.
-3. **Front-end → branch `front-end`.** Toda modificação no front-end vai para a branch **`front-end`** (https://github.com/Brcasp00/Torneios-chat/tree/front-end). Nunca misture código de front-end na branch `Back-end` nem o contrário. Hoje o repositório local está com a branch `front-end` em `D:\Projetos` (que também contém `backend/` vindo da `main`); alterações em `backend/` continuam indo só para `Back-end` (use um worktree para ela se precisar mexer no back-end: `git worktree add D:\Projetos-back Back-end`).
+3. **Front-end → branch `front-end`.** Toda modificação no front-end (`frontend/`, `main.py`) vai para a branch **`front-end`** (https://github.com/Brcasp00/Torneios-chat/tree/front-end). Nunca misture código de front-end na branch `Back-end` nem o contrário. O checkout principal (`D:\Projetos`) fica na branch `front-end` (contém também `backend/` vindo da `main`); alterações em `backend/` vão só para `Back-end`, feitas no **worktree `D:\Projetos-back`** (já existe, aponta para `Back-end`; recriar com `git worktree add D:\Projetos-back Back-end`). Não deixe alterações de `backend/` commitadas na `front-end`.
 4. **Segredos nunca vão para o Git.** `backend/.env` (DATABASE_URL, JWT_SECRET) é ignorado. Antes de cada commit, confira `git status`/`git diff --cached` e não deixe passar `.env`, `*.db`, `.venv/`. Nunca imprima a senha do banco nem cole a connection string em respostas/logs.
 5. **Testes antes de commitar:** `cd backend; .\.venv\Scripts\python -m pytest` deve passar.
 6. **Mensagens de commit** em português, no imperativo, com prefixo da fase quando fizer sentido (ex.: `Fase 4: gera chaveamento do mata-mata`), terminando com a linha `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
 7. **Toda tabela nova** (migration) deve repetir `ENABLE ROW LEVEL SECURITY` + `REVOKE ALL ... FROM anon, authenticated` (ver `alembic/versions/0001_*.py`). O FastAPI é o único acesso ao banco; a API REST pública do Supabase deve permanecer fechada.
 8. **Não escreva arquivos de código com `Set-Content`/`Add-Content` do PowerShell 5.1** (corrompe acentos). Use as ferramentas Write/Edit, ou Python com `encoding="utf-8"`.
 9. **Idioma:** conversa, mensagens de erro da API e comentários em português.
+10. **Botões nunca ficam só "desabilitados" sem explicação:** quando uma funcionalidade não pode ser feita (sorteio sem jogadores suficientes, rodada não escolhida, etc.), o botão fica clicável e, ao clicar, mostra o **motivo** (mensagem da API ou verificação prévia no front). Telas que escondem um formulário devem explicar por quê.
+11. **Cláusulas das regras de batalha não são informadas no front:** são definidas automaticamente pelo tier (Smogon/Showdown). O campo foi removido do formulário (a API ainda aceita `battle_rules.clauses`, vazio por padrão).
+12. **Migrations rodam no banco compartilhado:** `alembic upgrade head` local altera o Supabase real (o mesmo da produção). Só aplique migrations aditivas e revisadas; o Render também as aplica no start.
+13. **Ações que afetam a produção só quando o usuário pedir:** merge/PR na `main`, deploys, criação/remoção de dados reais. Não dê push na `main`. (O `gh` não está instalado: o PR é aberto pelo usuário em `https://github.com/Brcasp00/Torneios-chat/compare/main...<branch>`.)
 
 ## Contexto do projeto
 
@@ -20,20 +32,22 @@ O usuário organiza, com amigos, torneios de **Pokémon competitivo** (maioria d
 
 - **Back-end:** FastAPI + SQLAlchemy 2 (async) + Alembic. **Banco:** Supabase (Postgres, plano gratuito). Não usamos Supabase Auth nem a API REST do Supabase: autenticação própria (nome + senha, argon2, JWT).
 - **Front-end:** React + Vite + TypeScript em `frontend/` (branch `front-end`), tema escuro; ver a seção "Front-end".
-- **Repositório:** https://github.com/Brcasp00/Torneios-chat — branches `Back-end`, `front-end`, `main`. Raiz local: `D:\Projetos` (pasta `backend/` dentro).
+- **Repositório:** https://github.com/Brcasp00/Torneios-chat — branches `Back-end`, `front-end`, `main`. Raiz local: `D:\Projetos` (pastas `backend/` e `frontend/` dentro, mais `main.py` e este arquivo).
 - Possível futuro: notificações no Discord (a avaliar).
 
 ### Ambiente
 - Windows 11, PowerShell. Python via `py` (3.14). Venv em `backend/.venv` (`cd D:\Projetos\backend; .\.venv\Scripts\Activate.ps1`).
 - `backend/.env`: `DATABASE_URL` (Session/Transaction pooler do Supabase, **porta 6543**, sem colchetes na senha) e `JWT_SECRET`. As migrations trocam automaticamente para a porta **5432**.
-- **Deploy (Render, Web Service):** Root Directory `backend`, Build `pip install -r requirements.txt`, Start `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`, Health Check `/health`. Variáveis no painel do Render: `DATABASE_URL`, `JWT_SECRET` (valor próprio de produção), `CORS_ORIGINS` (URL do front), `PYTHON_VERSION` se necessário. Hoje o Render acompanha a branch `Back-end` com auto-deploy; quando o usuário trocar para `main`, a produção só muda após merge na `main`. As migrations rodam no start e alteram o mesmo banco do Supabase usado localmente (cuidado com migrations destrutivas). Plano gratuito: o serviço dorme após ~15 min sem acesso.
+- **Deploy (Render, Web Service):** Root Directory `backend`, Build `pip install -r requirements.txt`, Start `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`, Health Check `/health`. Variáveis no painel do Render: `DATABASE_URL`, `JWT_SECRET` (valor próprio de produção), `CORS_ORIGINS` (URL do front), `PYTHON_VERSION` se necessário. O Render acompanha a branch **`main`** com auto-deploy: a produção só muda após merge na `main`. As migrations rodam no start e alteram o mesmo banco do Supabase usado localmente (cuidado com migrations destrutivas). Plano gratuito: o serviço dorme após ~15 min sem acesso (o primeiro acesso depois disso demora ~1 min; a tarefa de prazos não roda enquanto dorme, por isso a leitura do torneio também verifica prazos).
+- **Deploy do front (Netlify):** projeto importado do mesmo repositório, branch de produção `main`, Base directory `frontend` (o `frontend/netlify.toml` define build `npm run build`, publish `dist`, Node 20 e o redirect de SPA; `frontend/public/_redirects` repete o redirect). Variável do Netlify: `VITE_API_URL` = URL da API no Render (sem barra final; só vale no build, então mudou → novo deploy). No Render, `CORS_ORIGINS` deve conter a URL do Netlify (sem barra final; várias separadas por vírgula, ex. incluindo `http://localhost:5173`). Trocar o nome do site no Netlify muda a URL → atualizar `CORS_ORIGINS`. Branch deploys/Deploy previews são opcionais (cada URL nova também precisa entrar em `CORS_ORIGINS`). Para voltar uma versão: Netlify → Deploys → "Publish deploy" do anterior; Render → redeploy do commit anterior.
+- **Conexão com o banco (importante):** o pooler do Supabase (porta 6543, modo transaction) não aceita prepared statements; `app/db/session.py` desliga o cache do asyncpg **e** o do SQLAlchemy (`prepared_statement_cache_size=0` na URL) e usa nomes únicos. Sem isso aparece `prepared statement "__asyncpg_..." does not exist` de forma intermitente (e o navegador mostra "não foi possível conectar", pois um 500 sem cabeçalho CORS parece falha de rede).
 - Skills Supabase instaladas (`supabase`, `supabase-postgres-best-practices`): consultar antes de mexer em schema/RLS.
 
 ## Papéis e permissões
 
 | Papel | Pode |
 |---|---|
-| `admin` | Tudo: promover usuários, resetar senhas, desativar contas, gerenciar qualquer torneio, validar/corrigir/invalidar resultados |
+| `admin` | Tudo: **criar usuários**, promover usuários, resetar senhas, desativar contas, ver a auditoria, gerenciar qualquer torneio, validar/corrigir/invalidar resultados |
 | `organizer` | Criar torneios e gerenciar **apenas os que criou** (inscrever jogadores, sortear, validar resultados) |
 | `player` | Reportar resultado dos **próprios** confrontos, desistir, alterar a própria senha. Não se inscreve sozinho (só o admin/organizador insere) |
 | anônimo | Ver torneios, tabelas, chaveamentos, confrontos, histórico |
@@ -65,20 +79,20 @@ Admin não pode rebaixar nem desativar a si mesmo. Admin reseta a senha (não h�
 - **Histórico:** cada mudança relevante salva um snapshot da tabela (`standings_snapshots`, `kind="change"`). Admin pode corrigir/invalidar resultados a qualquer momento (irregularidades); tudo é recalculado e registrado em `audit_log`. Além disso (`services/history.py`): **`kind="round"`** = tabela congelada quando uma rodada de pontos corridos/grupos fecha (uma por rodada, todas consultáveis; a tabela traz `played` por jogador para ver quem tem jogo a menos); **`kind="final"`** = estado final de cada fase (grupos, liga, mata-mata com `ranking`, rodada/playoff, e as fases dos subtorneios), regravado como nova versão se uma correção posterior o alterar (`versions`). Consultas públicas: `GET /tournaments/{id}/history/rounds[?stage_id=]`, `/history/stages` (inclui subtorneios), `/history?kind=`.
 - **Adiamento (só pontos corridos/grupos, só admin/organizador do torneio):** adia um jogo (`POST /matches/{id}/postpone`) ou os jogos pendentes de uma rodada (`POST /tournaments/{id}/rounds/postpone` com `stage_id`, `round`, `group_label` opcional, `reason`); `resume` desfaz enquanto o jogo não foi disputado. O jogo adiado **continua podendo ser reportado**; a fase e o torneio **não encerram** enquanto houver jogo pendente (e `PATCH status=finished` retorna 409). Uma rodada "fecha" para o histórico quando seus jogos estão validados/anulados ou adiados; o snapshot dela registra `postponed` (pendentes) e **nunca é alterado depois**. O jogo adiado, quando disputado, entra na tabela do próximo snapshot que fechar (`played_postponed`, com `original_round`) ou no estado final. Se uma rodada fechada voltar a ter jogo em aberto (invalidação/retomada) o snapshot ganha `reopened=true` e, ao fechar de novo, é criado um novo.
 - **Prazo das rodadas (`services/deadlines.py`):** admin/organizador define a data-limite de cada rodada, uma a uma (`PUT /tournaments/{id}/stages/{stage_id}/deadlines` com `{"deadlines": {"1": "<ISO com fuso>", "2": null}}`, null remove; data já passada é recusada com 422; fica em `stage.config.deadlines`). Vencido o prazo: em **liga/grupos** de torneio que **permite empate**, os jogos ainda `scheduled` (sem reporte, não adiados, não liberados) viram **empate 0x0 automático** (`matches.auto_result`, audit `match.auto_draw` com ator nulo, tabela recalculada). **Invalidar** esse empate marca `deadline_waived` e o jogo pode ser entregue atrasado (o prazo não age mais nele); retomar um jogo adiado depois do prazo também o libera. Em mata-mata/rodada única/playoff, ou em torneio sem empate, nada é decidido: o confronto só vem com `overdue=true` (aviso para o admin). Jogo com reporte pendente nunca é empatado. A verificação roda numa tarefa a cada 60 s (lifespan do FastAPI) **e** na leitura do torneio/confrontos/tabela/chaveamento/confronto, porque o plano gratuito do Render dorme. `MatchOut` ganhou `deadline`, `overdue`, `auto_result`, `deadline_waived`. Migration 0006.
-- **Regras de batalha:** campos estruturados (`battle_rules`: formato, jogo, tier, team_size, bring, level_cap, timer, clauses, showdown_required) + texto livre (`rules_text`).
+- **Regras de batalha:** campos estruturados (`battle_rules`: formato, jogo, tier, team_size, bring, level_cap, timer, clauses, showdown_required) + texto livre (`rules_text`). `team_size` = Pokémon no time registrado; `bring` = quantos entram em cada batalha (ex.: VGC 6/4); o máximo de "Pokémon vivos" aceito no reporte é `bring` (ou `team_size`, ou 6). Cláusulas: ver regra 11 (definidas pelo tier, sem campo no front).
 
 ## Arquitetura (back-end)
 
 ```
 backend/
   app/
-    main.py                 # FastAPI, CORS, routers
-    core/    config.py security.py deps.py   # settings, argon2/JWT, dependências de permissão
-    db/      base.py session.py              # Base/naming/JsonType/BigIntPK, engine async (pooler-safe)
-    models/  user.py tournament.py           # User, AuditLog | Tournament, Stage, AdvancementRule, TournamentPlayer, Match, MatchReport, StandingsSnapshot
-    schemas/ user.py tournament.py match.py  # Pydantic
-    api/     auth.py users.py tournaments.py play.py matches.py
-    services/ templates.py schedule.py bracket.py stages.py tables.py engine.py standings.py results.py views.py
+    main.py                 # FastAPI, CORS, routers, lifespan (tarefa de prazos a cada 60 s)
+    core/    config.py security.py deps.py   # settings, argon2/JWT, dependências (CurrentUser bloqueia senha temporária; CurrentUserAnyState só p/ /auth/me e change-password)
+    db/      base.py session.py              # Base/naming/JsonType/BigIntPK, engine async (pooler-safe, ver "Conexão com o banco")
+    models/  user.py tournament.py           # User(must_change_password), AuditLog | Tournament, Stage, AdvancementRule, TournamentPlayer, Match(postponed*, auto_result, deadline_waived), MatchReport, StandingsSnapshot(kind, round)
+    schemas/ user.py tournament.py match.py audit.py  # Pydantic
+    api/     auth.py users.py tournaments.py play.py matches.py audit.py
+    services/ templates.py schedule.py bracket.py stages.py tables.py engine.py standings.py results.py views.py history.py deadlines.py
     scripts/ create_admin.py
   alembic/versions/  0001_esquema_inicial.py  0002_fechar_alembic_version.py  0003_pote_do_jogador.py  0004_historico_e_adiamento.py  0005_senha_temporaria.py  0006_prazo_das_rodadas.py
   tests/   conftest.py test_auth_users.py test_tournaments.py test_play.py test_knockout.py test_groups.py test_draw.py test_repechage.py test_history.py test_audit.py test_deadlines.py   # SQLite em memória
@@ -92,13 +106,16 @@ backend/
 - **auth:** `POST /auth/register|login|change-password`, `GET /auth/me`
 - **users:** `GET /users` (público: id+nome), `GET /users/admin`, `POST /users` (admin cria conta; sem senha devolve temporária e marca `must_change_password`), `POST /users/{id}/reset-password`, `PATCH /users/{id}/role|active`
 - **tournaments:** `GET /tournaments`, `GET /tournaments/{id}` (detalhe completo: fases, regras, jogadores, subtorneios, `can_manage`), `POST /tournaments`, `POST /tournaments/{id}/subtournaments`, `PATCH /tournaments/{id}`, `PATCH /tournaments/{id}/status`, `DELETE /tournaments/{id}`, `GET|POST /tournaments/{id}/players`, `DELETE /tournaments/{id}/players/{user_id}`, `POST /tournaments/{id}/withdraw`, `PUT /tournaments/{id}/rules/{rule_id}/subtournament`, `POST /tournaments/{id}/rounds/postpone|resume`
-- **play:** `PUT /tournaments/{id}/pots`, `POST /tournaments/{id}/draw` (prévia: `seed`, `use_pots`, `arrangement`), `POST /tournaments/{id}/start` (mesmos campos), `GET /tournaments/{id}/draw` (registro do sorteio), `GET /tournaments/{id}/matches|standings|bracket|history`, `GET /tournaments/{id}/history/rounds|stages`, `GET /tournaments/{id}/history/{snapshot_id}`
-- **matches:** `GET /matches/{id}`, `POST /matches/{id}/report|validate|reject|result|walkover|invalidate|postpone|resume`
+- **play:** `PUT /tournaments/{id}/pots`, `POST /tournaments/{id}/draw` (prévia: `seed`, `use_pots`, `arrangement`), `POST /tournaments/{id}/start` (mesmos campos), `GET /tournaments/{id}/draw` (registro do sorteio), `GET /tournaments/{id}/matches` (filtros `stage_id`, `round`, `player_id`, `status_`, `postponed`), `GET /tournaments/{id}/standings|bracket|history` (`kind`), `GET /tournaments/{id}/history/rounds|stages`, `GET /tournaments/{id}/history/{snapshot_id}`, `PUT /tournaments/{id}/stages/{stage_id}/deadlines`
+- **matches:** `GET /matches/{id}`, `POST /matches/{id}/report|validate|reject|result|walkover|invalidate|postpone|resume`, `GET /matches/{id}/timeline` (público)
+- **audit:** `GET /audit` (admin; filtros `actor_id`, `action` exata ou prefixo terminado em ponto, `entity`, `entity_id`, `since`, `until`; `limit`/`offset`; devolve `total`+`items`)
+- Leituras (`GET /tournaments/{id}`, `/matches`, `/standings`, `/bracket`, `GET /matches/{id}`) chamam `deadlines.safe_sweep` antes de responder (aplica prazos vencidos).
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 9 (back-end: autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, senha temporária com troca obrigatória, prazo das rodadas; front-end básico completo em `frontend/` + `main.py`). 94 testes do back-end passando. Migrations 0001–0006 aplicadas no Supabase (o Render também as aplica sozinho no start). Back-end implantado no Render.
-**Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, e repescagem em subtorneio (entrada automática dos candidatos e retorno ao mata-mata principal).
+**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **94 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase (o Render também as aplica sozinho no start).
+**Em produção:** API no Render e site no Netlify, ambos seguindo a `main` (a `main` contém tudo até o commit "Front: mensagem de falha de conexão mais curta"). A `front-end` e a `Back-end` estão sincronizadas com a `main`, exceto por este documento quando editado.
+**Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, repescagem em subtorneio, histórico, adiamento e prazos. O usuário já testou a interface com os usuários de teste e relatou que funciona; ainda falta simular um torneio completo de ponta a ponta (sorteio → jogos → mata-mata → repescagem).
 
 ## Histórico de fases
 
@@ -120,26 +137,62 @@ backend/
 
 - **Fase 9 — Front-end (branch `front-end`):** app React 18 + Vite + TypeScript em `frontend/` (tema escuro estilo e-sports/Pokémon, responsivo, CSS puro, `react-router-dom`, sem biblioteca de UI), mais o orquestrador local `main.py` na raiz. Telas: início (torneios em andamento + "seus jogos pendentes"), lista de torneios, página do torneio com abas (visão geral, tabela/grupos, chaveamento, confrontos, **histórico** — fases encerradas, rodada a rodada, registro de alterações — e **gerenciar** para admin/organizador: status, inscrição, potes, prévia/início do sorteio, adiar rodada, subtorneios/ligação de repescagem), página do confronto (reporte com replay, validar/rejeitar/lançar/W.O./invalidar/adiar, linha do tempo), criação de torneio/subtorneio (botão "Novo torneio" na lista de torneios; modelos prontos + JSON para `custom`), conta (trocar senha) e administração, só para admins (criar usuários em página própria `/admin/usuarios/novo`, papéis, redefinir senha, auditoria). Atualização por polling (15–30 s, só com a aba visível). Prazo das rodadas: card "Prazo das rodadas" na aba Gerenciar (data/hora por rodada), prazo e avisos ("prazo vencido", "empate por prazo") nos confrontos. Senha temporária: quem entra com `must_change_password` é levado a "Minha conta" e não acessa mais nada até trocar a senha.
 
-## Próxima fase — Fase 10: polimento e deploy
+- **Melhorias pós-Fase 9 (pedidas pelo usuário durante os testes):**
+  - **Correção do pooler** (`session.py`, `prepared_statement_cache_size=0`) — corrigia 500 intermitentes (ver "Conexão com o banco").
+  - **Admin cria usuários:** `POST /users` + página `/admin/usuarios/novo` (botão "Criar usuário" na aba Usuários; ao concluir volta à administração mostrando o aviso e a senha temporária, se houver). Auditoria `user.create`.
+  - **Senha temporária obrigatória:** migration 0005 (`users.must_change_password`), regra no servidor (`CurrentUser` → 403) e no front (redireciona para "Minha conta" até trocar). Senha gerada pelo sistema = temporária; senha digitada pelo admin = definitiva.
+  - **Mostrar/ocultar senha** nos campos de senha (`PasswordInput`).
+  - **Prazo das rodadas:** migration 0006 e `services/deadlines.py` (ver regras de negócio); card "Prazo das rodadas" na aba Gerenciar.
+  - **Motivos nas ações** (regra 10), menu simplificado ("Novo torneio" só como botão em Torneios; "Administração" só para admin, outros são redirecionados), cláusulas removidas do formulário, mensagem de falha de conexão: "Não foi possível conectar ao servidor".
+  - **Deploy:** Netlify (front) e Render na `main`; `netlify.toml` + `_redirects`.
 
-Hospedagem do front (ex.: Render Static Site ou Netlify; build `npm run build` em `frontend/`, publicar `dist/`, variável `VITE_API_URL` apontando para a API do Render, e `CORS_ORIGINS` da API com a URL do front; SPA precisa de rewrite `/* -> /index.html`), revisão de mensagens/estados vazios, testes manuais ponta a ponta em celular, documentação final; avaliar notificações no Discord. Pendências do front: testes automatizados (nenhum ainda), editar torneio em rascunho pela interface (hoje só o back-end tem `PATCH /tournaments/{id}`), sorteio manual (`arrangement`) pela interface (a API já aceita), paginação do registro de alterações.
+## Próxima fase — Fase 10: polimento (em andamento)
+
+O deploy já foi feito (Netlify + Render na `main`). Falta/ideias, em ordem sugerida:
+1. **Simular um torneio completo** na produção/local com os usuários `teste*` (grupos + mata-mata + repescagem, adiamento, prazos) e corrigir o que aparecer; depois **desativar/apagar** os usuários e torneios de teste.
+2. Revisar mensagens, estados vazios e o uso em **celular**.
+3. Pendências do front: **testes automatizados** (nenhum ainda), **editar torneio em rascunho** pela interface (a API tem `PATCH /tournaments/{id}`), **sorteio manual** (`arrangement`) pela interface (a API já aceita), paginação do registro de alterações, trocar `window.confirm` por diálogos próprios.
+4. Segurança/operação: política de senhas dos usuários de teste, limite de tentativas de login (não existe), rotação do `JWT_SECRET`, backups do Supabase.
+5. Avaliar notificações no Discord.
 
 ## Perguntas em aberto / ideias
 - Notificações via Discord (webhook/bot): "interessante, verificar viabilidade depois".
 - Personalizações adicionais de formato: o usuário prometeu pedir depois.
+- Senha obrigatória a trocar também para senhas digitadas pelo admin? (hoje só as geradas; mudança pequena se quiser.)
+- Instalar o GitHub CLI (`gh`) para eu abrir os PRs (o merge continuaria sendo do usuário).
 
 ## Front-end (`frontend/`)
 ```
 frontend/
   src/ main.tsx App.tsx api.ts (cliente + tipos) auth.tsx hooks.ts (useLoad com polling) labels.ts styles.css
   src/components/ ui.tsx (Tabs, StandingsTable, MatchRow, BracketMatch, useAction...) SnapshotView.tsx TournamentCard.tsx
-  src/pages/ Home Login Account Tournaments TournamentPage MatchPage CreateTournament Admin
+  src/pages/ Home Login Account Tournaments TournamentPage MatchPage CreateTournament CreateUser Admin
   src/pages/tournament/ Overview Standings Bracket Matches History Manage
+  netlify.toml  public/_redirects  .env.example
 ```
-- Token JWT em `localStorage` (`torneios.token`); API em `VITE_API_URL` (padrão `http://localhost:8000`; ver `frontend/.env.example`). `frontend/` não é mais ignorado pelo `.gitignore` na branch `front-end`.
-- Rodar tudo localmente: `py main.py` na raiz (sobe API em :8000 e site em :5173; `--status`, `--only back|front`, `--open`, `--install`). Só serve ao desenvolvimento local.
+- **Rotas:** `/` início · `/entrar` · `/torneios` · `/torneios/novo` (staff; aceita `?parent=ID` para subtorneio) · `/torneios/:id` · `/matches/:id` · `/conta` (RequireAuth) · `/admin` e `/admin/usuarios/novo` (só admin; outros são redirecionados ao início). Usuário com `must_change_password` só alcança `/conta`.
+- **Padrões:** `api()` em `api.ts` (token no header, erros viram `ApiError` com a mensagem da API; falha de rede = "Não foi possível conectar ao servidor"); `useLoad(fn, deps, pollMs)` carrega e atualiza por polling sem piscar; `useAction()` executa ações e mostra a mensagem de sucesso/erro (`box`), com `setMsg` para recusas prévias (regra 10); tipos das respostas em `api.ts`; textos/rótulos em `labels.ts` (incluindo `actionLabel` da auditoria); estilos em `styles.css` (variáveis CSS, tema escuro).
+- **Telas-chave:** página do torneio = abas Visão geral · Tabela · Chaveamento · Confrontos · Histórico (Fases encerradas / Rodada a rodada / Registro de alterações) · Gerenciar (status, jogadores/potes, sorteio com prévia, adiar rodada, **prazo das rodadas**, subtorneios). Página do confronto = placar, avisos (prazo, empate automático, adiado), formulário de reporte do jogador, painel do organizador, reportes e linha do tempo.
+- Token JWT em `localStorage` (`torneios.token`); API em `VITE_API_URL` (padrão `http://localhost:8000`; ver `frontend/.env.example`). `frontend/` não é ignorado pelo `.gitignore` (o `frontend/.gitignore` ignora `node_modules`, `dist`, `.env`).
+- Rodar tudo localmente: `py main.py` na raiz (sobe API em :8000 e site em :5173; `--status`, `--only back|front`, `--open`, `--install`, `--no-reload`). Só serve ao desenvolvimento local; Ctrl+C encerra os dois. Usa o `backend/.env` (banco real!).
 - Conferir tipos/build: `cd frontend; npm run build`.
-- Deploy no Netlify: importar o repositório; Base directory `frontend` (o `netlify.toml` define build `npm run build`, publish `dist`, Node 20 e o redirect de SPA); variável `VITE_API_URL` = URL da API no Render; depois pôr a URL do Netlify (sem barra final) em `CORS_ORIGINS` no Render.
+- Deploy: ver a seção "Ambiente" (Netlify + Render).
+
+## Fluxo de trabalho e armadilhas
+
+**Sequência correta para mudanças:**
+1. *Só front:* eu edito na `front-end` → o usuário testa com `py main.py` → o usuário faz o PR/merge `front-end` → `main` → o Netlify refaz o site sozinho (~1–2 min).
+2. *Só back:* eu edito no worktree `D:\Projetos-back` (branch `Back-end`), rodo os testes, commito e dou push → o usuário testa localmente → merge `Back-end` → `main` → o Render refaz o deploy (migrations rodam no start).
+3. *Back e front juntos:* **back-end primeiro** na `main`, front depois, para o site novo nunca chamar rota inexistente na produção. Enquanto o back-end não está na `main`, eu posso copiar os arquivos de `D:\Projetos-back\backend` para `D:\Projetos\backend` **sem commitar** na `front-end` só para o usuário testar (e aplicar a migration no banco compartilhado, se houver).
+4. *Depois de qualquer merge na `main`:* atualizar a branch de trabalho com `git fetch; git merge origin/main` na `front-end` (e `git pull` no worktree da `Back-end`). Antes, descartar cópias locais de back-end (`git checkout -- backend` e apagar arquivos novos não rastreados que a `main` já tem), senão o merge recusa. O **`CLAUDE.md` costuma conflitar** (editado nas duas branches): resolver mantendo as duas versões.
+
+**Armadilhas já encontradas:**
+- Servidor local com `--reload` pode não recarregar todos os arquivos copiados à mão (sintoma: `405 method not allowed` em rota nova). Reinicie com `py main.py`. Para matar: encerrar quem escuta nas portas 8000/5173 (PowerShell `Get-NetTCPConnection` + `taskkill /T`).
+- Um 500 da API não traz cabeçalhos CORS → no navegador parece "falha de conexão". Olhe o log do servidor.
+- Heredocs grandes no `bash` do ambiente de trabalho falham com aspas/`EOF`: crie arquivos com a ferramenta Write/Edit. Python no bash é `py`; o venv é `backend/.venv/Scripts/python`.
+- Avisos `LF will be replaced by CRLF` do git no Windows são normais.
+- Testes que dependem de relógio usam `monkeypatch.setattr(app.services.deadlines, "now", ...)`; qualquer módulo que precise do "agora" do prazo deve chamar `deadlines.now()` pelo módulo (não `from ... import now`).
+- Scripts que criam dados reais (ex.: usuários de teste) fazem-se por script Python com `backend/.env`, registram `audit_log` (`user.seed`) e nunca imprimem a connection string.
 
 ## Comandos úteis (PowerShell, em `D:\Projetos\backend`)
 ```
@@ -149,3 +202,5 @@ frontend/
 .\.venv\Scripts\python -m app.scripts.create_admin "Nome" # criar/promover admin
 .\.venv\Scripts\uvicorn app.main:app --reload             # API em http://localhost:8000 (docs em /docs)
 ```
+Na raiz (`D:\Projetos`): `py main.py` (liga API + site), `py main.py --status`; no front: `cd frontend; npm run build`.
+Git: `git fetch; git merge origin/main` (atualizar a branch de trabalho), `git worktree list` (ver `D:\Projetos-back`).
