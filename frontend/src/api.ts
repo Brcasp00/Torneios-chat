@@ -51,7 +51,7 @@ export async function api<T = unknown>(path: string, opts: { method?: string; bo
   try {
     res = await fetch(url, { method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"), headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
   } catch {
-    throw new ApiError(0, "Não foi possível falar com o servidor. Se ele estava dormindo (plano gratuito), tente de novo em alguns segundos.");
+    throw new ApiError(0, "Não foi possível conectar ao servidor");
   }
   if (res.status === 204) return undefined as T;
   let body: unknown = null;
