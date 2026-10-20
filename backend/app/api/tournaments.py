@@ -399,6 +399,13 @@ async def delete_tournament(tournament_id: int, user: StaffUser, session: Sessio
     _require_manage(user, t)
     if user.role != "admin" and t.status != "draft":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Só admins podem apagar torneios que já saíram do rascunho.")
+    await delete_tree(session, t)
+    session.add(AuditLog(actor_id=user.id, action="tournament.delete", entity="tournament", entity_id=t.id, data={"name": t.name}))
+    await session.commit()
+
+
+async def delete_tree(session, t: Tournament) -> None:
+    """Apaga o torneio, os subtorneios e tudo o que pertence a eles (confrontos, reportes, histórico, inscrições)."""
     ids = [t.id] + list((await session.scalars(select(Tournament.id).where(Tournament.parent_id == t.id))).all())
     for tid in ids:
         match_ids = select(Match.id).where(Match.tournament_id == tid)
@@ -410,8 +417,6 @@ async def delete_tournament(tournament_id: int, user: StaffUser, session: Sessio
         await session.execute(delete(Stage).where(Stage.tournament_id == tid))
     await session.execute(delete(Tournament).where(Tournament.parent_id == t.id))
     await session.execute(delete(Tournament).where(Tournament.id == t.id))
-    session.add(AuditLog(actor_id=user.id, action="tournament.delete", entity="tournament", entity_id=t.id, data={"name": t.name}))
-    await session.commit()
 
 
 # ---------- jogadores ----------
