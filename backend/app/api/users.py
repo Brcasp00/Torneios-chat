@@ -49,7 +49,8 @@ async def create_user(data: AdminCreateUserIn, admin: AdminUser, session: Sessio
     if await session.scalar(select(User.id).where(func.lower(User.name) == data.name.lower())):
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um usuário com esse nome.")
     password = data.password or secrets.token_urlsafe(9)
-    user = User(name=data.name, password_hash=hash_password(password), role=data.role)
+    # Senha gerada pelo sistema é temporária: a pessoa é obrigada a trocá-la no primeiro acesso.
+    user = User(name=data.name, password_hash=hash_password(password), role=data.role, must_change_password=data.password is None)
     session.add(user)
     try:
         await session.flush()
@@ -69,6 +70,7 @@ async def reset_password(user_id: int, data: ResetPasswordIn, admin: AdminUser, 
     user = await _get_or_404(session, user_id)
     temp = data.new_password or secrets.token_urlsafe(9)
     user.password_hash = hash_password(temp)
+    user.must_change_password = data.new_password is None  # senha gerada = temporária; definida pelo admin = definitiva
     session.add(AuditLog(actor_id=admin.id, action="user.reset_password", entity="user", entity_id=user.id))
     await session.commit()
     return ResetPasswordOut(user_id=user.id, temporary_password=None if data.new_password else temp)

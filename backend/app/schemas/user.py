@@ -43,6 +43,7 @@ class UserOut(BaseModel):
     role: Role
     is_active: bool
     created_at: datetime
+    must_change_password: bool = False
 
 
 class UserPublic(BaseModel):
