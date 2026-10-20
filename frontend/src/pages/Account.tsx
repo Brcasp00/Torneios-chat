@@ -37,8 +37,8 @@ export default function Account() {
       <h1>{forced ? "Defina uma nova senha" : "Minha conta"}</h1>
       {forced && (
         <div className="alert warn">
-          Você entrou com uma <strong>senha temporária</strong>. Por segurança, escolha uma senha só sua para continuar usando a plataforma.
-          Informe a senha temporária no campo "Senha atual".
+          Você entrou com uma <strong>senha temporária</strong> ou com uma senha mais curta que o mínimo atual (8 caracteres).
+          Por segurança, escolha uma nova senha para continuar usando a plataforma. Informe a senha com que você entrou no campo "Senha atual".
         </div>
       )}
       {!forced && (
@@ -53,12 +53,12 @@ export default function Account() {
         <h2>Alterar senha</h2>
         {box}
         <div className="field">
-          <label htmlFor="cur">{forced ? "Senha atual (a temporária)" : "Senha atual"}</label>
+          <label htmlFor="cur">{forced ? "Senha atual (a que você usou para entrar)" : "Senha atual"}</label>
           <PasswordInput id="cur" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
         </div>
         <div className="field">
-          <label htmlFor="new">Nova senha (mínimo 6 caracteres, diferente da atual)</label>
-          <PasswordInput id="new" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required minLength={6} />
+          <label htmlFor="new">Nova senha (mínimo 8 caracteres, diferente da atual)</label>
+          <PasswordInput id="new" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required minLength={8} />
         </div>
         <div className="field">
           <label htmlFor="again">Repita a nova senha</label>

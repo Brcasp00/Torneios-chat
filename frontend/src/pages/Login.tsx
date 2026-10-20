@@ -41,7 +41,7 @@ export default function Login() {
           </div>
           <div className="field">
             <label htmlFor="pw">Senha</label>
-            <PasswordInput id="pw" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={mode === "register" ? 6 : 1} />
+            <PasswordInput id="pw" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={mode === "register" ? 8 : 1} />
           </div>
           {mode === "register" && (
             <div className="field">
