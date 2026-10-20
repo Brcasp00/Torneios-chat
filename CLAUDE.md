@@ -25,6 +25,7 @@
 11. **Cláusulas das regras de batalha não são informadas no front:** são definidas automaticamente pelo tier (Smogon/Showdown). O campo foi removido do formulário (a API ainda aceita `battle_rules.clauses`, vazio por padrão).
 12. **Migrations rodam no banco compartilhado:** `alembic upgrade head` local altera o Supabase real (o mesmo da produção). Só aplique migrations aditivas e revisadas; o Render também as aplica no start.
 13. **Ações que afetam a produção só quando o usuário pedir:** merge/PR na `main`, deploys, criação/remoção de dados reais. Não dê push na `main`. (O `gh` não está instalado: o PR é aberto pelo usuário em `https://github.com/Brcasp00/Torneios-chat/compare/main...<branch>`.)
+14. **`docs/FUNCIONAMENTO.md`** é o guia, em linguagem simples, de como toda a plataforma funciona (feito a pedido do usuário). Ao mudar uma regra ou funcionalidade, atualize a seção correspondente dele também (fica na branch `front-end`, como os demais documentos).
 
 ## Contexto do projeto
 
@@ -113,7 +114,7 @@ backend/
 
 ## Estado atual
 
-**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **94 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase (o Render também as aplica sozinho no start).
+**Concluído:** Fases 1 a 9 — back-end (autenticação, torneios/fases/regras/inscrição/subtorneios, pontos corridos, mata-mata, grupos + mata-mata com motor de regras, sorteador avançado, repescagem em subtorneio, histórico por rodada/final de fase, adiamento, auditoria, criação de usuário pelo admin, senha temporária com troca obrigatória, prazo das rodadas com empate automático) e front-end completo em `frontend/` + `main.py`. **101 testes do back-end passando** (o front ainda não tem testes automatizados; valida-se com `npm run build` e uso manual). Migrations **0001–0006** aplicadas no Supabase (o Render também as aplica sozinho no start).
 **Em produção:** API no Render e site no Netlify, ambos seguindo a `main` (a `main` contém tudo até o commit "Front: mensagem de falha de conexão mais curta"). A `front-end` e a `Back-end` estão sincronizadas com a `main`, exceto por este documento quando editado.
 **Funciona de ponta a ponta:** `league`, `knockout`, `groups_knockout` e `custom`, com sorteio aleatório, por potes ou manual, repescagem em subtorneio, histórico, adiamento e prazos. O usuário já testou a interface com os usuários de teste e relatou que funciona; ainda falta simular um torneio completo de ponta a ponta (sorteio → jogos → mata-mata → repescagem).
 
@@ -145,6 +146,14 @@ backend/
   - **Prazo das rodadas:** migration 0006 e `services/deadlines.py` (ver regras de negócio); card "Prazo das rodadas" na aba Gerenciar.
   - **Motivos nas ações** (regra 10), menu simplificado ("Novo torneio" só como botão em Torneios; "Administração" só para admin, outros são redirecionados), cláusulas removidas do formulário, mensagem de falha de conexão: "Não foi possível conectar ao servidor".
   - **Deploy:** Netlify (front) e Render na `main`; `netlify.toml` + `_redirects`.
+- **Revisão de segurança (Fase 10, commits `3d5beb5` e `36cfef4` na `Back-end`; front na `front-end`):**
+  - `core/login_guard.py`: 3 senhas erradas seguidas (janela de 10 min) bloqueiam o login daquele nome por 10 min (429 + `Retry-After`), inclusive nomes inexistentes; login certo zera; `reset-password` desbloqueia. Estado em memória (zera ao reiniciar). Testes zeram com `login_guard.reset()` no `conftest`.
+  - `config.py`: a API não inicia com `JWT_SECRET` padrão ou com menos de 32 caracteres.
+  - Senha mínima **8** (`security.MIN_PASSWORD_LENGTH`); login com senha antiga mais curta marca `must_change_password` (mensagem 403 genérica de troca de senha). Front com `minLength=8` e texto ajustado em "Minha conta".
+  - argon2id com parâmetros mínimos da OWASP (19 MiB, t=2, p=1), calculado em thread (`hash_password_async`/`verify_password_async`, no máximo 2 simultâneos); hashes antigos são refeitos no login (`needs_rehash`).
+  - `deadlines.sweep_tournament` só usa `FOR UPDATE` quando há jogo a empatar (consulta prévia sem trava, com os filtros no SQL).
+  - Conexão com o banco com `ssl="require"` (verificado: TLS 1.3); `limit`/`offset` negativos → 422.
+  - Avaliados e pendentes (decisão do usuário): fechar/limitar o cadastro público, revogar tokens ao trocar senha (precisa de migration), cabeçalhos de segurança no Netlify, atualizar Vite/React Router, banco separado para testes + backup.
 
 ## Próxima fase — Fase 10: polimento (em andamento)
 
@@ -152,7 +161,7 @@ O deploy já foi feito (Netlify + Render na `main`). Falta/ideias, em ordem suge
 1. **Simular um torneio completo** na produção/local com os usuários `teste*` (grupos + mata-mata + repescagem, adiamento, prazos) e corrigir o que aparecer; depois **desativar/apagar** os usuários e torneios de teste.
 2. Revisar mensagens, estados vazios e o uso em **celular**.
 3. Pendências do front: **testes automatizados** (nenhum ainda), **editar torneio em rascunho** pela interface (a API tem `PATCH /tournaments/{id}`), **sorteio manual** (`arrangement`) pela interface (a API já aceita), paginação do registro de alterações, trocar `window.confirm` por diálogos próprios.
-4. Segurança/operação: política de senhas dos usuários de teste, limite de tentativas de login (não existe), rotação do `JWT_SECRET`, backups do Supabase.
+4. Segurança/operação (continuação da revisão): cabeçalhos de segurança no Netlify, decisão sobre o cadastro público, **banco separado para testes** (novo projeto Supabase) e rotina de backup, revogação de tokens ao trocar senha, atualização de dependências do front.
 5. Avaliar notificações no Discord.
 
 ## Perguntas em aberto / ideias
