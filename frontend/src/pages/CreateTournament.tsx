@@ -52,7 +52,6 @@ export default function CreateTournament() {
   const [tier, setTier] = useState("");
   const [teamSize, setTeamSize] = useState("");
   const [bring, setBring] = useState("");
-  const [clauses, setClauses] = useState("");
   const [showdown, setShowdown] = useState(true);
   const [rulesText, setRulesText] = useState("");
 
@@ -69,7 +68,6 @@ export default function CreateTournament() {
         battle_rules: {
           format: format || null, game: game || null, tier: tier || null,
           team_size: num(teamSize), bring: num(bring),
-          clauses: clauses.split(",").map((c) => c.trim()).filter(Boolean),
           showdown_required: showdown,
         },
         config: {
@@ -157,7 +155,7 @@ export default function CreateTournament() {
           <div className="field"><label>Pokémon no time</label><input type="number" min={1} max={6} value={teamSize} onChange={(e) => setTeamSize(e.target.value)} /></div>
           <div className="field"><label>Pokémon levados</label><input type="number" min={1} max={6} value={bring} onChange={(e) => setBring(e.target.value)} /></div>
         </div>
-        <div className="field"><label>Cláusulas (separadas por vírgula)</label><input value={clauses} onChange={(e) => setClauses(e.target.value)} placeholder="Sleep Clause, Species Clause" /></div>
+        <p className="muted small">As cláusulas seguem automaticamente o tier escolhido (regras da Smogon no Showdown), então não precisam ser informadas aqui.</p>
         <div className="field inline"><input id="sd" type="checkbox" checked={showdown} onChange={(e) => setShowdown(e.target.checked)} /><label htmlFor="sd">Replay do Showdown obrigatório no reporte</label></div>
         <div className="field"><label>Regras em texto livre</label><textarea value={rulesText} onChange={(e) => setRulesText(e.target.value)} maxLength={5000} /></div>
       </div>
