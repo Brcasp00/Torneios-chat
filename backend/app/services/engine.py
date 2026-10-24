@@ -81,7 +81,13 @@ async def compute_outputs(session, t: Tournament, stage: Stage) -> dict:
 
 
 def _slots_for_rule(rule: AdvancementRule, outputs: dict) -> list[int]:
-    """Jogadores que a regra envia, na ordem das vagas de destino."""
+    """Jogadores que a regra envia, na ordem das vagas de destino.
+
+    Regras que ocupam vagas (outra fase / torneio principal) exigem todas as posições. Eliminação e repescagem só pegam
+    quem existe: com grupos de tamanhos diferentes (ex.: 4, 4, 3, 3), "3º e 4º eliminados" não acha o 4º nos grupos
+    de 3, e isso não é erro.
+    """
+    strict = rule.target in FORWARD
     if rule.source == "group_position":
         groups: dict[str, list[int]] = outputs["groups"]
         labels = sorted(groups)
@@ -100,12 +106,14 @@ def _slots_for_rule(rule: AdvancementRule, outputs: dict) -> list[int]:
         for lbl, pos in pairs:
             members = groups.get(lbl, [])
             if pos > len(members):
+                if not strict:
+                    continue
                 raise EngineError(f"O grupo {lbl} não tem a posição {pos}.")
             out.append(members[pos - 1])
         return out
     pool = outputs.get(rule.source) or []
     chunk = pool[rule.pos_from - 1 : rule.pos_to]
-    if len(chunk) != rule.pos_to - rule.pos_from + 1:
+    if strict and len(chunk) != rule.pos_to - rule.pos_from + 1:
         raise EngineError(f"A fase não tem jogadores suficientes para as posições {rule.pos_from} a {rule.pos_to} ({rule.source}).")
     return chunk
 

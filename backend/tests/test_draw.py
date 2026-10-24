@@ -206,7 +206,7 @@ def result(m, rem):
             "p2_remaining": 0 if p1 else rem, "replay_urls": [REPLAY]}
 
 
-async def run_round_to_ko(client, seeding):
+async def run_round_to_ko(client, seeding, tag=""):
     adm = await admin(client)
     ko_cfg = {"seeding": seeding} if seeding else {}
     body = {
@@ -218,7 +218,7 @@ async def run_round_to_ko(client, seeding):
         ],
     }
     t = (await client.post("/tournaments", json=body, headers=auth(adm))).json()
-    users = [(await client.post("/auth/register", json={"name": f"Seed{seeding or 'dflt'}{i}", "password": "senha123"})).json()["user"]["id"] for i in range(8)]
+    users = [(await client.post("/auth/register", json={"name": f"Seed{seeding or 'dflt'}{tag}{i}", "password": "senha123"})).json()["user"]["id"] for i in range(8)]
     await client.post(f"/tournaments/{t['id']}/players", json={"user_ids": users}, headers=auth(adm))
     await client.post(f"/tournaments/{t['id']}/start", json={"seed": 4}, headers=auth(adm))
     ms = sorted((await client.get(f"/tournaments/{t['id']}/matches", params={"stage_id": t["stages"][0]["id"]})).json(), key=lambda m: m["slot"])
@@ -236,3 +236,12 @@ async def test_default_seeding_is_standard_and_sequential_is_available(client):
     assert pairs == [(winners[0], winners[3]), (winners[1], winners[2])]
     winners2, pairs2 = await run_round_to_ko(client, "sequential")  # posição literal na chave
     assert pairs2 == [(winners2[0], winners2[1]), (winners2[2], winners2[3])]
+
+
+async def test_random_seeding_draws_the_bracket_reproducibly(client):
+    winners, pairs = await run_round_to_ko(client, "random")
+    assert sorted(p for pair in pairs for p in pair) == sorted(winners)  # todos os classificados, uma vez cada
+    winners2, pairs2 = await run_round_to_ko(client, "random", tag="b")
+    # mesma semente do torneio -> mesmo sorteio (comparado pela posição de cada classificado)
+    as_rank = lambda ws, ps: sorted(tuple(sorted((ws.index(a), ws.index(b)))) for a, b in ps)  # noqa: E731
+    assert as_rank(winners, pairs) == as_rank(winners2, pairs2)
