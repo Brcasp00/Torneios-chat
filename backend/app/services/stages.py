@@ -184,7 +184,10 @@ def plan_stage(
             return Plan(bracket_slots=slots, third_place=third, seeds={u: i for i, u in enumerate(seed_list, 1)}, mode="pots")
         if not fed:
             return Plan(bracket_slots=schedule.shuffled(ordered_ids, s), third_place=third)
-        if (cfg.get("seeding") or default_seeding) == "standard":
+        seeding = cfg.get("seeding") or default_seeding
+        if seeding == "random":
+            slots = schedule.shuffled(ordered_ids, s)  # chave sorteada (reproduzível: semente do torneio + fase)
+        elif seeding == "standard":
             slots = [ordered_ids[seed_no - 1] for seed_no in standard_order(n)]  # vaga = seed (1 = melhor)
         else:
             slots = list(ordered_ids)  # vaga = posição no chaveamento (pares adjacentes se enfrentam)
