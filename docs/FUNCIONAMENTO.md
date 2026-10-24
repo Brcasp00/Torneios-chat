@@ -200,6 +200,9 @@ Os modelos prontos montam isso sozinhos:
 
 ### Grupos + mata-mata em detalhe
 - O número de grupos é sugerido pelo total de jogadores (~4 por grupo), mas pode ser escolhido.
+- **Grupos de tamanhos diferentes** são permitidos (ex.: 14 jogadores em 4 grupos = 4, 4, 3 e 3). Os classificados e a
+  posição que vai à repescagem precisam existir **no menor grupo** (com grupos de 3, no máximo 2 classificados), e a
+  criação explica o problema se não existirem. A eliminação vale para quem existe: o grupo de 3 simplesmente não tem 4º.
 - Define-se quantos se classificam por grupo (ex.: 2).
 - **Cruzamento fixo:** grupos pareados (A com B, C com D...). O 1º de um grupo enfrenta o 2º do grupo parceiro
   (1ºA × 2ºB, 1ºB × 2ºA), e as chaves são intercaladas para que jogadores do mesmo grupo só se reencontrem tarde.
@@ -342,22 +345,38 @@ seguinte já teve jogo reportado, a API recusa (409): invalide de trás para fre
 **Exemplo (personalizado):** 20 jogadores fazem uma rodada única de 10 confrontos; os 6 melhores vencedores (por saldo)
 vão direto ao mata-mata de 8; os 4 piores perdedores jogam um playoff; os 2 vencedores do playoff completam as 8 vagas.
 
-### O editor do torneio personalizado
-Na tela "Novo torneio", com o modelo **Personalizado**, aparece o bloco **Estrutura do torneio** (sem JSON na tela):
-- **Fases:** cada fase tem nome, tipo e só as opções que fazem sentido para aquele tipo — "melhor de", turno e returno
-  (liga/grupos), número de grupos (vazio = automático), disputa de 3º lugar e montagem da chave (mata-mata: automática,
-  1º × último, ou na ordem das vagas), pares sorteados ou melhor × pior (rodada única/playoff a partir da 2ª fase) e
-  **vagas reservadas para quem volta da repescagem**. Dá para reordenar (↑ ↓) e remover fases. Ao lado do número da fase
-  aparece quantos jogadores ela vai receber.
-- **Regras de passagem:** cada regra é uma linha "Da fase X · quem · da posição A até B · vão para (outra fase /
-  eliminados / repescagem / torneio principal) · a partir da vaga N". As opções de "quem" mudam conforme o tipo da fase
-  (ex.: "posição em cada grupo" só aparece em fase de grupos). Abaixo de cada regra aparece a frase do que ela faz, por
-  exemplo: *"Da fase 1: do 1º ao 2º de cada grupo (8 jogadores) vão para a fase 2 ("Mata-mata"), vagas 1 a 8."*
-  Grupos que alimentam um mata-mata podem usar o **cruzamento fixo** (1ºA × 2ºB...).
-- **Verificação:** o editor confere a estrutura enquanto você monta (mesmas regras do servidor: tamanhos de cada fase,
-  vagas sem buraco e sem sobreposição, mata-mata em potência de 2, número par em rodada única/playoff, etc.) e lista o
-  que precisa ajustar. Com algum problema, o botão "Criar torneio" explica o motivo em vez de enviar.
-- **Subtorneio (repescagem):** a regra "torneio principal" lista as fases do principal com as vagas que cada uma reservou.
+### O editor do torneio personalizado (por fluxo)
+Na tela "Novo torneio", com o modelo **Personalizado**, aparece o bloco **Estrutura do torneio**. Não há JSON nem números
+de vaga: cada fase é um cartão que diz **para onde vão os jogadores quando ela termina**.
+
+- **Começar de um exemplo:** preenche formatos comuns para ajustar a partir deles (e ajusta o nº de jogadores):
+  20 jogadores com rodada única → repescagem (playoff) → mata-mata de 8; 16 jogadores em 4 grupos → mata-mata de 8;
+  pontos corridos → semifinal e final com os 4 melhores; rodada única → pontos corridos com os 6 vencedores.
+- **Cada fase:** nome, tipo e só as opções daquele tipo — "melhor de", turno e returno (liga/grupos), nº de grupos
+  (vazio = automático), disputa de 3º lugar, **montagem da chave** do mata-mata (automática, **por sorteio**, por posição
+  — o melhor enfrenta o pior — ou na ordem das vagas) e pares sorteados ou melhor × pior (rodada única/playoff a partir da
+  2ª fase). Ao lado do nome aparece quantos jogadores a fase vai receber. Dá para reordenar (↑ ↓) e remover fases.
+- **Tipos de fase:** rodada única (cada um joga uma vez), **playoff / repescagem interna** (duelos para decidir vagas,
+  dentro do próprio torneio), pontos corridos, fase de grupos e mata-mata.
+- **"Depois desta fase":** cada linha é um destino, como *"Vencedores do 1º ao 6º → Fase 3: Mata-mata"*. As opções de
+  "quem" dependem do tipo: vencedores/perdedores (rodada única e playoff), colocados de cada grupo ou melhores no geral
+  (grupos), classificação (pontos corridos e mata-mata). Abaixo da linha aparece quantos jogadores ela leva, em que ordem
+  e quais vagas eles ocupam no destino. **As vagas são calculadas sozinhas**, na ordem das linhas (o primeiro destino
+  ocupa as primeiras vagas — importa quando a chave é "por posição").
+- **Os demais são eliminados:** quem não está em nenhuma linha é eliminado quando a fase termina; o cartão mostra quantos.
+- **Ordem dos vencedores:** "os 6 melhores vencedores" são os 6 com maior **saldo de Pokémon** na vitória (empate de saldo
+  é decidido por sorteio). Perdedores: os de menor prejuízo vêm primeiro.
+- **Repescagem dentro do torneio** (como no exemplo dos 20): use uma fase do tipo playoff (dê o nome que quiser). Já o
+  destino **"Torneio de repescagem separado (subtorneio)"** manda os jogadores para outro torneio, ligado a este (seção 12);
+  nesse caso a fase que os recebe de volta ganha o campo **"Vagas para quem volta do torneio de repescagem separado"**:
+  basta dizer quantas (ex.: 2) e elas ficam no fim da chave.
+- **Mata-mata alimentado por várias fases** só é montado quando todas elas terminam (no exemplo dos 20, a chave aparece
+  depois da repescagem).
+- **Resumo e verificação:** no fim, um resumo por fase ("20 jogadores: 6 vencedores → Mata-mata · 4 vencedores →
+  Repescagem · 10 eliminados") ou a lista do que ajustar (mesmas regras do servidor: mata-mata em potência de 2, número par
+  em rodada única/playoff, posições que existem, etc.). Com algum problema, "Criar torneio" explica o motivo.
+- **Subtorneio de repescagem:** os destinos oferecem "Volta ao torneio principal: <fase>", e as vagas de volta são as que
+  o principal reservou.
 - Ao criar, a API confere tudo de novo e explica o erro se algo não fizer sentido.
 
 ---

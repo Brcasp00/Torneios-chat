@@ -49,7 +49,7 @@ export default function CreateTournament() {
   const [rulesText, setRulesText] = useState("");
 
   const num = (s: string) => (s.trim() === "" ? null : Number(s));
-  const analysis = useMemo(() => analyze(builder, Number(maxPlayers) || 0, !!parent), [builder, maxPlayers, parent]);
+  const analysis = useMemo(() => analyze(builder, Number(maxPlayers) || 0, !!parent, parentStages), [builder, maxPlayers, parent, parentStages]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -77,7 +77,7 @@ export default function CreateTournament() {
       };
       if (tpl === "custom") {
         if (analysis.errors.length) throw new Error(`Ajuste a estrutura do torneio antes de criar: ${analysis.errors[0]}`);
-        Object.assign(body, toPayload(builder, Number(bestOf)));
+        Object.assign(body, toPayload(builder, Number(maxPlayers), parentStages));
       }
       const t = await api<TournamentDetail>(parent ? `/tournaments/${parent}/subtournaments` : "/tournaments", { body });
       nav(`/torneios/${t.id}`);
@@ -133,7 +133,7 @@ export default function CreateTournament() {
       {tpl === "custom" && (
         <div className="card">
           <h2>Estrutura do torneio</h2>
-          <CustomBuilder value={builder} onChange={setBuilder} maxPlayers={Number(maxPlayers) || 0} isSub={!!parent} parentStages={parentStages} analysis={analysis} />
+          <CustomBuilder value={builder} onChange={setBuilder} maxPlayers={Number(maxPlayers) || 0} onMaxPlayers={(n) => setMaxPlayers(String(n))} isSub={!!parent} parentStages={parentStages} analysis={analysis} />
         </div>
       )}
 
