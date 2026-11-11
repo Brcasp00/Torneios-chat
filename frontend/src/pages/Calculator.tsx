@@ -8,7 +8,7 @@ import { ErrorBox, Loading } from "../components/ui";
 interface EconomyConfig {
   label: string; initial_budget: number; sponsors: number; win_per_sponsor: number; draw_per_sponsor: number; loss_per_sponsor: number;
   wo_fine: number; salary_rate_bp: number; registration_step: number; registration_free_slots: number; registration_charge: "season" | "round";
-  max_squad: number; max_registered: number; ct_build: number[]; ct_maintenance: number[]; ct_parallel: number[];
+  max_squad: number; max_registered: number; ct_build: number[]; ct_maintenance: number[]; ct_parallel: number[]; ct_min_level: Record<string, number>;
   training_extra_bp: number; training_opt_bp: number; tier_order: string[]; tier_prices: Record<string, number | null>; market_premium: number;
   league_rounds: number; knockout_rounds: number; league_label: string; knockout_label: string; prizes: number[];
 }
@@ -29,7 +29,7 @@ interface State {
   koPlayed: number; placement: string;
 }
 
-const STORE = "calculadora.v1";
+const STORE = "calculadora.v2"; // mudou a regra do CT: descarta simulações salvas com os valores antigos
 const blankMon = (): Mon => ({ name: "", price: "", tier: "", registered: true });
 const initial: State = {
   preset: "", config: null, squad: [blankMon()], ct: { current: 0, target: "", build: "" }, trainings: [],
@@ -54,6 +54,11 @@ export function fmtM(n: number): string {
 }
 const pctTxt = (bp: number) => (bp / 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 const fromPct = (s: string) => Math.round(Number(s.replace(",", ".")) * 100) || 0;
+const CT_LEVEL: Record<number, string> = {
+  1: "Nível 1 — treina posição extra",
+  2: "Nível 2 — também otimiza função",
+  3: "Nível 3 — dois treinos ao mesmo tempo",
+};
 const RES_LABEL: Record<Res, string> = { W: "Vitória", D: "Empate", L: "Derrota", WO: "W.O. perdido", "-": "Não jogada" };
 
 function load(): State {
@@ -249,12 +254,12 @@ export default function Calculator() {
         <div className="form-grid">
           <div className="field"><label>Nível atual</label>
             <select value={s.ct.current} onChange={(e) => set({ ct: { ...s.ct, current: Number(e.target.value) } })}>
-              <option value={0}>Não tenho CT</option>{[1, 2, 3].map((n) => <option key={n} value={n}>Nível {n}</option>)}
+              <option value={0}>Não tenho CT</option>{[1, 2, 3].map((n) => <option key={n} value={n}>{CT_LEVEL[n]}</option>)}
             </select>
           </div>
           <div className="field"><label>Construir / melhorar até</label>
             <select value={s.ct.target} onChange={(e) => set({ ct: { ...s.ct, target: e.target.value } })}>
-              <option value="">Não vou construir</option>{[1, 2, 3].filter((n) => n > s.ct.current).map((n) => <option key={n} value={n}>Nível {n}</option>)}
+              <option value="">Não vou construir</option>{[1, 2, 3].filter((n) => n > s.ct.current).map((n) => <option key={n} value={n}>{CT_LEVEL[n]}</option>)}
             </select>
           </div>
           {s.ct.target && (
@@ -283,7 +288,7 @@ export default function Calculator() {
             </div>
           ))}
           <button type="button" className="btn small" style={{ marginTop: ".4rem" }} onClick={() => set({ trainings: [...s.trainings, { pokemon: 0, kind: "extra", round: Number(s.ct.build) || 1 }] })}>Adicionar treinamento</button>
-          <p className="muted small">O treinamento fica pronto depois de algumas rodadas, conforme o tier do Pokémon (ZU 1, PU 2, NU 3…; "BL" conta como o tier de baixo).</p>
+          <p className="muted small">Nível 1 treina posição extra, o nível 2 libera a otimização e o nível 3 treina dois Pokémon ao mesmo tempo. O treinamento fica pronto depois de algumas rodadas, conforme o tier do Pokémon (ZU 1, PU 2, NU 3…; "BL" conta como o tier de baixo), em qualquer nível.</p>
         </details>
       </div>
 

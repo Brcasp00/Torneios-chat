@@ -772,8 +772,9 @@ nada é gravado no servidor, e o que a pessoa preenche fica salvo apenas no nave
   - **CT**: construção na rodada escolhida (subir de nível paga a diferença); **manutenção em todas as rodadas da
     temporada**, mesmo depois de eliminado, a partir da rodada seguinte à construção;
   - **treinamento**: 20% (posição extra) ou 40% (otimização) do preço pago, na rodada em que começa; fica pronto depois
-    de algumas rodadas conforme o tier (ZU 1, PU 2, NU 3…; "BL" conta como o tier de baixo); avisa se passar do número de
-    treinamentos simultâneos do nível do CT;
+    de algumas rodadas conforme o tier (ZU 1, PU 2, NU 3…; "BL" conta como o tier de baixo), em qualquer nível do CT;
+  - **níveis do CT**: nível 1 treina posição extra; nível 2 também otimiza função; nível 3 treina dois Pokémon ao mesmo
+    tempo (nos níveis 1 e 2, um por vez). A calculadora avisa quando o plano não cabe no nível;
   - **W.O. perdido**: multa de 500 mil e nenhuma renda.
 - **Resultados:** modo simples (vitórias com botões + e −, empates, W.O.; derrotas calculadas; a renda é dividida
   igualmente entre as rodadas jogadas) ou rodada a rodada; até onde o jogador vai no mata-mata e a colocação final
