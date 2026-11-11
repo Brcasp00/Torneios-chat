@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, type TournamentDetail } from "../api";
+import { api, type ArchiveSummary, type TournamentDetail } from "../api";
 import { Badge, ErrorBox, Loading, Tabs } from "../components/ui";
 import { useLoad } from "../hooks";
 import { template, tournamentStatus } from "../labels";
@@ -18,6 +18,9 @@ export default function TournamentPage() {
   const tid = Number(id);
   const [tab, setTab] = useState<Tab>("overview");
   const d = useLoad(() => api<TournamentDetail>(`/tournaments/${tid}`), [tid], 20000);
+  const finished = d.data?.status === "finished" && !d.data.parent_id;
+  // Encerrado: o torneio está no acervo (a página dele lá tem a classificação final, a descrição e a série).
+  const entry = useLoad(() => (finished ? api<ArchiveSummary>(`/archive/by-tournament/${tid}`).catch(() => null) : Promise.resolve(null)), [tid, finished]);
 
   if (d.loading) return <Loading />;
   if (d.error || !d.data) return <ErrorBox error={d.error ?? "Torneio não encontrado."} />;
@@ -48,6 +51,9 @@ export default function TournamentPage() {
         </div>
       </div>
 
+      {entry.data && (
+        <div className="alert ok">Este torneio já terminou e está no <Link to={`/acervo/${entry.data.id}`}>Acervo</Link>{entry.data.champion ? <> — campeão: <strong>{entry.data.champion.name}</strong></> : null}.</div>
+      )}
       <Tabs<Tab> tabs={tabs} value={current} onChange={setTab} />
       {current === "overview" && <Overview t={t} />}
       {current === "standings" && <Standings t={t} />}

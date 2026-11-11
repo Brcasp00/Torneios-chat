@@ -150,3 +150,15 @@ pre.json { background: #0e1120; border: 1px solid var(--line); border-radius: 10
 .timeline { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
 .timeline li { position: relative; padding: 0 0 .9rem 1rem; }
 .timeline li::before { content: ""; position: absolute; left: -6px; top: .35rem; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+
+/* ---------- tela de entrada, acervo e perfil ---------- */
+.hub-card { display: block; color: inherit; padding: 1.4rem 1.3rem; border: 1px solid var(--line); transition: border-color .12s, transform .12s; }
+.hub-card:hover { border-color: var(--accent); text-decoration: none; transform: translateY(-2px); }
+.hub-card .icon { font-size: 2rem; line-height: 1; margin-bottom: .5rem; }
+.hub-card h2 { margin: 0 0 .3rem; }
+.player-link { color: inherit; border-bottom: 1px dotted var(--muted); }
+.player-link:hover { color: var(--accent); text-decoration: none; border-bottom-color: var(--accent); }
+.stat-row { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.stat-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: .7rem .8rem; text-align: center; }
+.stat-box .n { font-size: 1.5rem; font-weight: 800; }
+.editor-row { display: grid; gap: .5rem; align-items: end; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); padding: .5rem 0; border-bottom: 1px solid var(--line); }

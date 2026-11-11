@@ -132,3 +132,27 @@ export interface DrawOut { seed: number; mode: string; rounds: DrawRound[]; arra
 export interface DrawRecord { seed: number; mode: string; drawn_at: string | null; pots: Record<string, number>; players: PlayerRef[] }
 
 export interface AuditItem { id: number; created_at: string; actor_id: number | null; actor_name: string | null; action: string; entity: string; entity_id: number | null; data: Record<string, unknown> | null }
+
+// ---------- acervo, séries e perfil ----------
+export interface ArchivePlayer { user_id: number | null; name: string }
+export interface ArchiveLink { label: string; url: string }
+export interface ArchiveSummary {
+  id: number; name: string; tournament_id: number | null; start_date: string | null; end_date: string | null;
+  format: string | null; players_count: number | null; series: { id: number; name: string } | null; edition: number | null;
+  champion: ArchivePlayer | null;
+}
+export interface ArchivePlacement extends ArchivePlayer { position: number; label: string | null }
+export interface ArchiveMatch { id: number; stage_label: string; number: number | null; player1: ArchivePlayer; player2: ArchivePlayer; winner: number | null; replay_url: string | null }
+export interface ArchiveDetail extends ArchiveSummary {
+  organizer: string | null; tier: string | null; rules_text: string | null; description: string | null; links: ArchiveLink[];
+  placements: ArchivePlacement[]; matches: ArchiveMatch[]; created_at: string; updated_at: string;
+}
+export interface Series { id: number; name: string; description: string | null }
+export interface SeriesDetail extends Series { editions: ArchiveSummary[] }
+export interface Finish { archive_id: number; tournament_id: number | null; name: string; date: string | null; position: number; label: string | null }
+export interface Profile {
+  id: number; name: string; role: Role; member_since: string;
+  stats: { played: number; wins: number; draws: number; losses: number; saldo: number };
+  titles: Finish[]; podiums: Finish[]; archive: Finish[];
+  current: { tournament_id: number; name: string; status: string; player_status: string }[];
+}

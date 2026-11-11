@@ -6,9 +6,15 @@ import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 import CreateTournament from "./pages/CreateTournament";
 import CreateUser from "./pages/CreateUser";
-import Home from "./pages/Home";
+import Archive from "./pages/Archive";
+import ArchiveEntry from "./pages/ArchiveEntry";
+import ArchiveForm from "./pages/ArchiveForm";
+import Hub from "./pages/Hub";
 import Login from "./pages/Login";
 import MatchPage from "./pages/MatchPage";
+import Players from "./pages/Players";
+import Profile from "./pages/Profile";
+import SeriesPage from "./pages/SeriesPage";
 import TournamentPage from "./pages/TournamentPage";
 import Tournaments from "./pages/Tournaments";
 
@@ -17,18 +23,20 @@ function Nav() {
   return (
     <header className="nav">
       <div className="nav-inner">
-        <Link to="/" className="brand">
-          <span className="pokeball" /> Torneios Pokémon
+        <Link to="/" className="brand" aria-label="Início" title="Início">
+          <span className="pokeball" />
         </Link>
         <nav className="nav-links">
           <NavLink to="/" end>Início</NavLink>
           <NavLink to="/torneios">Torneios</NavLink>
+          <NavLink to="/acervo">Acervo</NavLink>
+          <NavLink to="/jogadores">Jogadores</NavLink>
           {isAdmin && <NavLink to="/admin">Administração</NavLink>}
         </nav>
         <div className="nav-user">
           {user ? (
             <>
-              <Link to="/conta" title={roleLabel[user.role]}>{user.name}</Link>
+              <Link to={`/jogadores/${user.id}`} title={`${roleLabel[user.role]} · ver meu perfil`}>{user.name}</Link>
               <button className="btn small ghost" onClick={logout}>Sair</button>
             </>
           ) : (
@@ -62,12 +70,19 @@ export default function App() {
       <Nav />
       <main className="container">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Hub />} />
           <Route path="/entrar" element={<Login />} />
           <Route path="/torneios" element={<Tournaments />} />
           <Route path="/torneios/novo" element={<RequireAuth staff><CreateTournament /></RequireAuth>} />
           <Route path="/torneios/:id" element={<TournamentPage />} />
           <Route path="/matches/:id" element={<MatchPage />} />
+          <Route path="/acervo" element={<Archive />} />
+          <Route path="/acervo/novo" element={<RequireAuth admin><ArchiveForm /></RequireAuth>} />
+          <Route path="/acervo/series/:id" element={<SeriesPage />} />
+          <Route path="/acervo/:id" element={<ArchiveEntry />} />
+          <Route path="/acervo/:id/editar" element={<RequireAuth admin><ArchiveForm /></RequireAuth>} />
+          <Route path="/jogadores" element={<Players />} />
+          <Route path="/jogadores/:id" element={<Profile />} />
           <Route path="/conta" element={<RequireAuth><Account /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />
           <Route path="/admin/usuarios/novo" element={<RequireAuth admin><CreateUser /></RequireAuth>} />

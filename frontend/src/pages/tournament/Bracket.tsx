@@ -1,5 +1,5 @@
 import { api, type BracketStage, type TournamentDetail } from "../../api";
-import { BracketMatch, ErrorBox, Loading } from "../../components/ui";
+import { BracketMatch, ErrorBox, Loading, PlayerLink } from "../../components/ui";
 import { useLoad } from "../../hooks";
 
 export default function Bracket({ t }: { t: TournamentDetail }) {
@@ -26,7 +26,7 @@ export default function Bracket({ t }: { t: TournamentDetail }) {
               {s.champion && (
                 <div className="col" style={{ minWidth: 200 }}>
                   <h3>Campeão</h3>
-                  <div className="champion"><div className="muted small">🏆</div><div className="name">{s.champion.name}</div></div>
+                  <div className="champion"><div className="muted small">🏆</div><div className="name"><PlayerLink id={s.champion.id} name={s.champion.name} /></div></div>
                 </div>
               )}
             </div>

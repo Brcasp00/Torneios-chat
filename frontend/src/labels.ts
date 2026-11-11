@@ -81,3 +81,16 @@ export function toLocalInput(iso: string | null | undefined): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+/** Data sem hora ("2019-03-01" -> "01/03/2019"), sem o fuso deslocar o dia. */
+export function fmtDay(d: string | null | undefined): string {
+  if (!d) return "—";
+  const [y, m, day] = d.slice(0, 10).split("-");
+  return y && m && day ? `${day}/${m}/${y}` : d;
+}
+
+/** Período de um torneio do acervo. */
+export function fmtPeriod(start: string | null, end: string | null): string {
+  if (start && end && start !== end) return `${fmtDay(start)} a ${fmtDay(end)}`;
+  return start || end ? fmtDay(start || end) : "data não informada";
+}

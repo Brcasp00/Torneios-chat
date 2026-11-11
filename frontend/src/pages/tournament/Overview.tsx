@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { api, type DrawRecord, type TournamentDetail } from "../../api";
-import { Badge } from "../../components/ui";
+import { Badge, PlayerLink } from "../../components/ui";
 import { useLoad } from "../../hooks";
 import { fmtDate, playerStatus, stageType, template, tournamentStatus } from "../../labels";
 
@@ -82,7 +82,7 @@ export default function Overview({ t }: { t: TournamentDetail }) {
                 <tbody>
                   {t.players.map((p) => (
                     <tr key={p.user_id}>
-                      <td>{p.name}</td>
+                      <td><PlayerLink id={p.user_id} name={p.name} /></td>
                       {groups.length > 0 && <td>{p.group_label ?? "—"}</td>}
                       <td>{p.seed ?? "—"}</td>
                       <td><Badge kind={p.status}>{playerStatus[p.status]}</Badge></td>

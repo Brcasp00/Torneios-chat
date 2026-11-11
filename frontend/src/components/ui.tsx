@@ -72,7 +72,7 @@ export function StandingsTable({ rows, highlight, qualifiers = 0 }: { rows: Stan
                 <span className={`pos ${r.position === 1 ? "p1" : r.position <= qualifiers ? "q" : ""}`}>{r.position}</span>
               </td>
               <td>
-                {r.name} {r.withdrawn && <span className="badge withdrawn">desistiu</span>}
+                <PlayerLink id={r.user_id} name={r.name} /> {r.withdrawn && <span className="badge withdrawn">desistiu</span>}
               </td>
               <td className="num"><strong>{r.points}</strong></td>
               <td className="num">{r.played}</td>
@@ -143,4 +143,9 @@ export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>,
       </button>
     </div>
   );
+}
+
+/** Nome de jogador que leva ao perfil (quem não tem conta aparece só como texto). */
+export function PlayerLink({ id, name }: { id: number | null | undefined; name: string }) {
+  return id ? <Link to={`/jogadores/${id}`} className="player-link">{name}</Link> : <span>{name}</span>;
 }

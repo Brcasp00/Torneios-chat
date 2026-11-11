@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type MatchDetail, type Report, type TimelineEvent } from "../api";
 import { useAuth } from "../auth";
-import { Badge, ErrorBox, Loading, useAction } from "../components/ui";
+import { Badge, ErrorBox, Loading, PlayerLink, useAction } from "../components/ui";
 import { useLoad } from "../hooks";
 import { actionLabel, fmtDate, matchStatus } from "../labels";
 
@@ -48,11 +48,11 @@ export default function MatchPage() {
           </span>
         </div>
         <div className="grid" style={{ gridTemplateColumns: "1fr auto 1fr", alignItems: "center", textAlign: "center", margin: "1.2rem 0" }}>
-          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: winner?.id === m.player1?.id ? "var(--accent)" : undefined }}>{m.player1?.name ?? "A definir"}</div>
+          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: winner?.id === m.player1?.id ? "var(--accent)" : undefined }}>{m.player1 ? <PlayerLink id={m.player1.id} name={m.player1.name} /> : "A definir"}</div>
           <div className="score" style={{ fontSize: "1.8rem", fontWeight: 800, padding: ".3rem 1rem", background: "#0e1120", borderRadius: 10 }}>
             {decided ? `${m.p1_wins} × ${m.p2_wins}` : "×"}
           </div>
-          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: winner?.id === m.player2?.id ? "var(--accent)" : undefined }}>{m.player2?.name ?? "A definir"}</div>
+          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: winner?.id === m.player2?.id ? "var(--accent)" : undefined }}>{m.player2 ? <PlayerLink id={m.player2.id} name={m.player2.name} /> : "A definir"}</div>
         </div>
         {decided && bo === 1 && !m.is_draw && <p className="center muted">Pokémon restantes: {m.p1_remaining} × {m.p2_remaining}</p>}
         {winner && <p className="center">Vencedor: <strong>{winner.name}</strong></p>}

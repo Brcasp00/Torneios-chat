@@ -30,6 +30,7 @@ Serve para consultar antes de mudar algo, para explicar a alguém como usar, ou 
 21. [Desenvolvimento local, branches e backup](#21-desenvolvimento-local-e-branches)
 22. [O que ainda não existe na interface](#22-o-que-ainda-não-existe-na-interface)
 23. [Glossário](#23-glossário)
+24. [Tela inicial, acervo, séries e perfis dos jogadores](#24-tela-inicial-acervo-séries-e-perfis-dos-jogadores)
 
 ---
 
@@ -164,7 +165,7 @@ rascunho ──► inscrições ──► em andamento ──► encerrado
 | **Rascunho** | Recém-criado; dá para mexer em tudo |
 | **Inscrições** | Aberto para o organizador inscrever jogadores (ainda editável) |
 | **Em andamento** | Sorteio feito, confrontos gerados; jogos sendo disputados |
-| **Encerrado** | Todas as fases terminaram (automático) ou o organizador encerrou manualmente |
+| **Encerrado** | Todas as fases terminaram (automático) ou o organizador encerrou manualmente. O torneio **sai da área de torneios e vai para o Acervo** (seção 24) |
 | **Cancelado** | Interrompido; nada mais acontece |
 
 - **Iniciar** só acontece pelo botão **"Sortear e iniciar"** (não por troca de estado) e exige **exatamente** o número
@@ -490,9 +491,11 @@ A aba **Histórico** tem três partes:
 
 | Tela | Endereço | Conteúdo |
 |---|---|---|
-| Início | `/` | Torneios em andamento, com inscrições abertas e encerrados recentemente; "Seus jogos pendentes" para quem está logado |
+| Início | `/` | Tela de entrada com as áreas da plataforma: Torneios, Acervo, Jogadores e, para quem está logado, Meu perfil |
 | Entrar / Cadastrar | `/entrar` | Login e cadastro |
-| Torneios | `/torneios` | Lista de torneios; botão **"Novo torneio"** (admin/organizador) |
+| Torneios | `/torneios` | "Seus jogos pendentes", torneios em andamento e com inscrições abertas (os encerrados ficam no Acervo; os cancelados só aparecem para admins); botão **"Novo torneio"** (admin/organizador) |
+| Acervo | `/acervo`, `/acervo/:id`, `/acervo/series/:id` | Torneios já realizados, séries e, para admins, cadastro/edição/remoção (seção 24) |
+| Jogadores | `/jogadores`, `/jogadores/:id` | Lista de jogadores e perfil público de cada um (seção 24) |
 | Novo torneio | `/torneios/novo` | Criação com modelo pronto ou personalizado (editor visual de fases e regras). Com `?parent=ID`, cria um subtorneio |
 | Torneio | `/torneios/:id` | Abas: **Visão geral**, **Tabela**, **Chaveamento**, **Confrontos**, **Histórico** e **Gerenciar** (só admin/organizador do torneio) |
 | Confronto | `/matches/:id` | Placar, avisos (prazo, empate automático, adiado), formulário de reporte, painel do organizador, reportes e linha do tempo |
@@ -666,3 +669,55 @@ Outras pendências: testes automáticos do site, paginação do registro de alte
 | **Erro 409** | "Conflito": a ação não pode ser feita no estado atual (a mensagem explica o motivo) |
 | **Erro 422** | Dados inválidos no formulário (a mensagem diz qual campo) |
 | **Erro 429** | Muitas tentativas: o login está bloqueado temporariamente |
+
+---
+
+## 24. Tela inicial, acervo, séries e perfis dos jogadores
+
+### Tela inicial
+O endereço principal (`/`) é a **porta de entrada** da plataforma, pública: cartões para **Torneios** (o que está
+acontecendo agora), **Acervo** (o que já aconteceu), **Jogadores** e, para quem está logado, **Meu perfil**. A plataforma
+ainda não tem nome; o topo mostra só o ícone, que leva de volta à tela inicial.
+
+### Acervo de torneios
+O acervo guarda o histórico de **todos** os torneios da comunidade.
+- **Torneios da plataforma entram sozinhos:** quando um torneio encerra (automaticamente ou pelo botão "Encerrar
+  manualmente"), ele **sai da área de torneios** e aparece no acervo com um resumo (nome, datas, formato, participantes,
+  tier, organizador) e a **classificação final calculada pelo sistema**. O histórico completo (tabelas, chaveamento,
+  confrontos com replays) continua no próprio torneio, aberto pelo botão "Ver o torneio completo".
+- **Classificação final automática:** a ordem da última fase vem primeiro (no mata-mata: campeão, vice, 3º/4º ou os dois
+  semifinalistas empatados em 3º, os das quartas empatados em 5º...), depois quem caiu nas fases anteriores, com o nome da
+  fase como rótulo.
+- **Se o torneio reabrir** (um resultado invalidado depois do fim), ele sai do acervo e volta para a área de torneios até
+  encerrar de novo. O que o admin escreveu no acervo (descrição, links, série) é mantido.
+- **Torneios antigos** (de antes da plataforma) são cadastrados por um **admin** em "Adicionar torneio antigo": nome,
+  datas, formato, nº de participantes, organizador (opcional), tier, regras, descrição livre, links, **classificação final**
+  (posição, jogador e rótulo opcional; posições repetidas = empate) e **partidas** (fase/rodada, nº da partida, os dois
+  jogadores, vencedor opcional e link do replay, que pode ficar vazio).
+- **Jogadores com ou sem conta:** em torneios antigos, o campo de jogador sugere as contas existentes; se o nome bater com
+  uma conta, ele fica ligado ao perfil dela ("✓ conta na plataforma"); se não, fica só como texto.
+- **Links:** só são aceitos endereços que começam com `https://` (ou `http://`).
+- **Quem edita:** só admins. Num torneio da plataforma, dá para editar a descrição, os links e a série/edição (a
+  classificação e as partidas vêm do torneio). Num torneio antigo, tudo.
+- **Remover do acervo APAGA o torneio de vez** (no caso de um torneio da plataforma, com confrontos, tabelas e
+  histórico). O admin precisa digitar o nome do torneio para confirmar, e a remoção fica na auditoria. Só dá para
+  recuperar restaurando um backup (seção 21).
+- **Torneios cancelados** não vão para o acervo: ficam numa lista "Cancelados" na área de torneios, visível só para
+  admins, que podem apagá-los.
+
+### Séries
+Torneios recorrentes (ex.: "Copa X", 1ª, 2ª, 3ª edição) podem ser agrupados numa **série**. Admins criam séries na
+página do Acervo e ligam cada torneio a uma série (com o número da edição) na tela de edição dele. A página da série
+mostra todas as edições e os campeões. Apagar uma série não apaga os torneios: eles ficam no acervo, sem série.
+
+### Perfil dos jogadores
+Toda conta tem um **perfil público** (`/jogadores/:id`). O nome dos jogadores vira link para o perfil nas tabelas, na
+página do confronto, no chaveamento, na lista de inscritos e no acervo. O perfil mostra:
+- papel e "membro desde";
+- **números:** jogos, vitórias, empates, derrotas e saldo (das partidas disputadas na plataforma);
+- **títulos** (1º lugar) e **pódios** (2º e 3º), contando todo o acervo (torneios da plataforma e antigos);
+- torneios em andamento de que participa e todos os torneios do acervo em que aparece, com a colocação.
+
+A personalização do perfil pelo próprio jogador (foto, nick do Showdown, Discord...) ainda será definida. Imagens (perfil,
+acervo e uma possível galeria) usarão um serviço de arquivos — sugestão: **Supabase Storage** (não muda o banco de dados).
+
