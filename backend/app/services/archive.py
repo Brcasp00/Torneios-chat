@@ -6,9 +6,9 @@ acervo até ele encerrar de novo — e o que o admin editou nela (descrição, l
 """
 from datetime import date, datetime, timezone
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 
-from app.models import ArchiveEntry, ArchivePlacement, Stage, Tournament, TournamentPlayer, User
+from app.models import ArchiveEntry, ArchivePlacement, Match, Stage, Tournament, TournamentPlayer, User
 from app.services import bracket, engine, tables
 
 TEMPLATE_LABEL = {"league": "Pontos corridos", "knockout": "Mata-mata", "groups_knockout": "Grupos + mata-mata"}
@@ -88,7 +88,10 @@ async def sync_entry(session, t: Tournament) -> ArchiveEntry | None:
         )
         session.add(entry)
     entry.name = t.name
-    entry.end_date = today
+    # Término = dia do último resultado validado (do torneio e dos subtorneios), não o dia em que entrou no acervo.
+    family = select(Tournament.id).where(or_(Tournament.id == t.id, Tournament.parent_id == t.id))
+    last = await session.scalar(select(func.max(Match.validated_at)).where(Match.tournament_id.in_(family)))
+    entry.end_date = last.date() if last else today
     entry.players_count = players
     await session.flush()
     await session.execute(delete(ArchivePlacement).where(ArchivePlacement.entry_id == entry.id))
