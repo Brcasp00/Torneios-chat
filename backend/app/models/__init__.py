@@ -8,3 +8,4 @@ from app.models.tournament import (  # noqa: F401
     TournamentPlayer,
 )
 from app.models.user import AuditLog, User  # noqa: F401
+from app.models.archive import ArchiveEntry, ArchiveMatch, ArchivePlacement, Series  # noqa: F401

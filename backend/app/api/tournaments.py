@@ -26,7 +26,7 @@ from app.schemas.tournament import (
     TournamentSummary,
     TournamentUpdate,
 )
-from app.services import deadlines, engine, results, templates
+from app.services import archive, deadlines, engine, results, templates
 
 router = APIRouter(prefix="/tournaments", tags=["tournaments"])
 
@@ -345,6 +345,8 @@ async def set_status(tournament_id: int, data: StatusIn, user: StaffUser, sessio
             )
     old = t.status
     t.status = data.status
+    if data.status == "finished":
+        await archive.sync_entry(session, t)  # encerrado manualmente: também vai para o acervo
     session.add(
         AuditLog(
             actor_id=user.id, action="tournament.set_status", entity="tournament", entity_id=t.id, data={"from": old, "to": data.status}

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import audit, auth, matches, play, tournaments, users
+from app.api import archive, audit, auth, matches, play, players, tournaments, users
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.services import deadlines
@@ -40,6 +40,9 @@ app.include_router(tournaments.router)
 app.include_router(play.router)
 app.include_router(matches.router)
 app.include_router(audit.router)
+app.include_router(archive.router)
+app.include_router(archive.series_router)
+app.include_router(players.router)
 
 
 @app.get("/health", tags=["meta"])

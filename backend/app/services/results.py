@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 
 from app.models import Match, MatchReport, Stage, StandingsSnapshot, Tournament, TournamentPlayer
-from app.services import engine, history, tables
+from app.services import archive, engine, history, tables
 from app.services.bracket import THIRD_PLACE
 
 REPLAY_RE = re.compile(r"^https://replay\.pokemonshowdown\.com/[A-Za-z0-9._\-/]+$")
@@ -226,6 +226,8 @@ async def recalc(session, t: Tournament, stage: Stage, reason: str, match_id: in
         await session.flush()
         await history.record(session, t, stage)  # rodadas fechadas e estado final da fase
         await engine.sync(session, t, stage)
+        if t.status == "finished":
+            await archive.sync_entry(session, t)  # encerrou: vai para o acervo (com a classificação final)
 
 
 async def _reactivate(session, t: Tournament, stage: Stage) -> None:
