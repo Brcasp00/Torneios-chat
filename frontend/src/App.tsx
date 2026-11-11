@@ -14,6 +14,7 @@ import Hub from "./pages/Hub";
 import Login from "./pages/Login";
 import MatchPage from "./pages/MatchPage";
 import Players from "./pages/Players";
+import Pokedex from "./pages/Pokedex";
 import Profile from "./pages/Profile";
 import SeriesPage from "./pages/SeriesPage";
 import TournamentPage from "./pages/TournamentPage";
@@ -84,6 +85,7 @@ export default function App() {
           <Route path="/acervo/:id/editar" element={<RequireAuth admin><ArchiveForm /></RequireAuth>} />
           <Route path="/jogadores" element={<Players />} />
           <Route path="/calculadora" element={<Calculator />} />
+          <Route path="/pokedex" element={<Pokedex />} />
           <Route path="/jogadores/:id" element={<Profile />} />
           <Route path="/conta" element={<RequireAuth><Account /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />

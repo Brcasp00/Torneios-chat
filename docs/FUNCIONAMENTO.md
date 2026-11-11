@@ -33,6 +33,7 @@ Serve para consultar antes de mudar algo, para explicar a alguém como usar, ou 
 24. [Tela inicial, acervo, séries e perfis dos jogadores](#24-tela-inicial-acervo-séries-e-perfis-dos-jogadores)
 25. [Mando de campo e escolhas do mandante](#25-mando-de-campo-e-escolhas-do-mandante)
 26. [Calculadora da temporada (Draft)](#26-calculadora-da-temporada-draft)
+27. [Pokédex (catálogo de Pokémon)](#27-pokédex-catálogo-de-pokémon)
 
 ---
 
@@ -782,3 +783,23 @@ nada é gravado no servidor, e o que a pessoa preenche fica salvo apenas no nave
 - **Saídas:** resumo (caixa após as compras, custo, renda + prêmio, saldo, caixa final em verde/vermelho), aviso da
   rodada em que o caixa fica negativo (transferban), **vitórias para empatar as contas** e a tabela rodada a rodada, com
   exportação em CSV.
+
+---
+
+## 27. Pokédex (catálogo de Pokémon)
+
+Página **/pokedex** (cartão "Pokédex" na tela inicial), pública. Lista todos os Pokémon jogáveis no Showdown com:
+número, nome, tipos, região e os tiers **lado a lado: Geração 9 National Dex e Geração 7** ("—" = não existia na Geração 7).
+
+- **Formas** (regionais, Megas, Rotom-Wash, Urshifu-Rapid-Strike…) são Pokémon separados. Ficam de fora os criados por
+  fãs (CAP), as formas que só aparecem durante a batalha (Aegislash-Blade, Mimikyu-Busted…), Gigantamax, Totem e Megas
+  ainda não lançadas no Showdown.
+- **Região** = pelo número da Pokédex (Kanto 1–151, Johto 152–251, Hoenn 252–386, Sinnoh 387–493, Unova 494–649,
+  Kalos 650–721, Alola 722–809, Galar 810–898, Hisui 899–905, Paldea 906–1025); formas regionais contam na região da
+  forma (Raichu-Alola = Alola); Megas, na região do Pokémon.
+- Filtros por nome/número, região, tier de cada geração e "só a forma principal".
+- Os dados vêm dos arquivos públicos do Showdown e ficam num arquivo do código (`backend/app/data/pokedex.json`), não no
+  banco. Para atualizar quando o Showdown mudar os tiers: `python -m app.scripts.update_pokedex` (em `backend/`) e
+  publicar a nova versão.
+- Na National Dex da Geração 9 os tiers só vão até **RU**: tudo abaixo aparece como RU. Os tiers menores (NU, PU, ZU)
+  existem na coluna da Geração 7.

@@ -24,6 +24,7 @@ export default function Hub() {
       extra: last ? `Mais recente: ${last.name}${last.champion ? ` — campeão ${last.champion.name}` : ""}` : null,
     },
     { to: "/jogadores", icon: "👥", title: "Jogadores", text: "Perfis dos jogadores: títulos, pódios, torneios disputados e números.", extra: null },
+    { to: "/pokedex", icon: "📖", title: "Pokédex", text: "Todos os Pokémon jogáveis, com as formas separadas e os tiers da Gen 9 National Dex e da Gen 7 lado a lado.", extra: null },
     { to: "/calculadora", icon: "🧮", title: "Calculadora da temporada", text: "Simule gastos e ganhos do seu clube no Draft: salários, inscrição, CT, renda e prêmios, rodada a rodada.", extra: null },
     ...(user ? [{ to: `/jogadores/${user.id}`, icon: "⭐", title: "Meu perfil", text: "Seus títulos, seus torneios e seus números.", extra: null }] : []),
   ];
