@@ -293,6 +293,7 @@ async def update_tournament(tournament_id: int, data: TournamentUpdate, user: St
     if data.battle_rules is not None:
         t.battle_rules = data.battle_rules.model_dump()
 
+    kept_draft = (t.config or {}).get("draft")
     structure_changed = data.max_players is not None or data.config is not None
     if data.max_players is not None:
         current = (await _counts(session, [t.id])).get(t.id, 0)
@@ -317,6 +318,8 @@ async def update_tournament(tournament_id: int, data: TournamentUpdate, user: St
         )
         t.config = await _create_structure(session, t, rebuilt, parent)
 
+    if kept_draft is not None and "draft" not in (t.config or {}):
+        t.config = {**(t.config or {}), "draft": kept_draft}  # a configuração do Draft não faz parte do formato
     session.add(AuditLog(actor_id=user.id, action="tournament.update", entity="tournament", entity_id=t.id))
     await session.commit()
     await session.refresh(t)

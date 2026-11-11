@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import archive, audit, auth, calculator, matches, play, players, pokedex, tournaments, users
+from app.api import archive, audit, auth, calculator, draft, matches, play, players, pokedex, tournaments, users
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.services import archive as archive_service
@@ -52,6 +52,7 @@ app.include_router(archive.series_router)
 app.include_router(players.router)
 app.include_router(calculator.router)
 app.include_router(pokedex.router)
+app.include_router(draft.router)
 
 
 @app.get("/health", tags=["meta"])
