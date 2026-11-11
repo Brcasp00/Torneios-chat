@@ -7,7 +7,8 @@ Regras (edital + decisões do organizador):
   (`registration_charge="season"`, na 1ª rodada) ou a cada rodada jogada ("round", especificação antiga).
 - CT: construção na rodada escolhida (subir de nível paga a diferença); manutenção em TODAS as rodadas da temporada
   (mesmo sem jogar), a partir da seguinte à construção, com o valor do nível vigente. Quem já tem CT paga desde a 1ª.
-- Treinamento: % do preço pago, cobrado na rodada em que começa.
+- Treinamento: % do preço pago, cobrado na rodada em que começa. Nível 1 do CT treina posição extra; nível 2 libera a
+  otimização; nível 3 treina dois Pokémon ao mesmo tempo. A espera depende só do tier (ZU 1, PU 2, NU 3...).
 - Renda por rodada jogada: vitória/empate/derrota x patrocinadores; W.O. perdido não rende e paga multa.
 - Prêmio por colocação: entra na última rodada da temporada.
 Dinheiro sempre em euros inteiros.
@@ -108,8 +109,12 @@ def compute(inp: CalcIn) -> CalcOut:
         if t.round > total_rounds:
             errors.append(f"Treinamento de {label} na rodada {t.round}: a temporada tem {total_rounds} rodadas.")
             continue
-        if ct_level_existing(t.round) == 0:
+        level_now = ct_level_existing(t.round)
+        need = c.ct_min_level.get(t.kind, 1)
+        if level_now == 0:
             warnings.append(f"Treinamento de {label} na rodada {t.round}: o CT ainda não existe nessa rodada.")
+        elif level_now < need:
+            warnings.append(f"Treinamento de {label} na rodada {t.round}: {kind} exige CT nível {need} (o seu é nível {level_now}).")
         training_cost[t.round] += pct(p.price, c.training_extra_bp if t.kind == "extra" else c.training_opt_bp)
         wait = tier_wait(p.tier, c.tier_order)
         if wait is None:

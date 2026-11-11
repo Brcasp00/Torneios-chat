@@ -34,7 +34,9 @@ DRAFT = {
     "max_registered": 11,
     "ct_build": [0, 25 * M, 50 * M, 90 * M],  # preço acumulado do nível (subir de nível paga a diferença)
     "ct_maintenance": [0, 500_000, 1 * M, 2 * M],  # por rodada da temporada (mesmo sem jogar), a partir da seguinte à construção
-    "ct_parallel": [0, 1, 2, 2],  # treinamentos ao mesmo tempo por nível (só aviso)
+    "ct_parallel": [0, 1, 1, 2],  # treinamentos ao mesmo tempo por nível: só o nível 3 treina dois de uma vez
+    "ct_min_level": {"extra": 1, "opt": 2},  # nível 1 treina posição extra; nível 2 libera a otimização
+    # Espera do treinamento (posição extra ou otimização): depende do tier do Pokémon, não do nível do CT.
     "training_extra_bp": 2000,  # posição extra: 20% do preço pago
     "training_opt_bp": 4000,  # otimização: 40% do preço pago
     "tier_order": TIER_ORDER,  # espera do treinamento: ZU 1 rodada, PU 2, NU 3... (+1 por tier)

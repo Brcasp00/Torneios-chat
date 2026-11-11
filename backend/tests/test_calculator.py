@@ -110,6 +110,13 @@ def test_trainings_cost_wait_and_capacity():
     assert out.rows[1].trainings == 20 * M + 2 * M  # otimização 40% de 50 mi + posição extra 20% de 10 mi
     assert any("CT ainda não existe" in w for w in out.warnings)  # treinamento na rodada 1, CT só na 2
     assert any("Rodada 2: 2 treinamentos" in w for w in out.warnings)  # nível 1 = 1 por vez
+    assert any("otimização exige CT nível 2" in w for w in out.warnings)  # nível 1 só treina posição extra
+    lvl3 = calc("draft", squad=squad, ct={"current_level": 3},
+                trainings=[{"pokemon": 0, "kind": "opt", "round": 1}, {"pokemon": 1, "kind": "extra", "round": 1}])
+    assert lvl3.warnings == []  # nível 3: dois ao mesmo tempo, com otimização
+    lvl2 = calc("draft", squad=squad, ct={"current_level": 2},
+                trainings=[{"pokemon": 0, "kind": "opt", "round": 1}, {"pokemon": 1, "kind": "extra", "round": 1}])
+    assert [w for w in lvl2.warnings if "ao mesmo tempo" in w] and not [w for w in lvl2.warnings if "exige" in w]
     assert any("Mew (otimização): começa na rodada 2 e vale a partir da rodada 7" in n for n in out.notes)  # UUBL = UU = 5
     assert [calculator.tier_wait(t, draft_config.TIER_ORDER) for t in ("ZU", "ZUBL", "PU", "NU", "OUBL", "xx")] == [1, 1, 2, 3, 6, None]
 

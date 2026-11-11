@@ -24,6 +24,7 @@ class EconomyConfig(BaseModel):
     ct_build: list[int] = Field(min_length=4, max_length=4)
     ct_maintenance: list[int] = Field(min_length=4, max_length=4)
     ct_parallel: list[int] = Field(min_length=4, max_length=4)
+    ct_min_level: dict[str, int] = Field(default_factory=lambda: {"extra": 1, "opt": 2})
     training_extra_bp: int = Field(ge=0, le=10_000)
     training_opt_bp: int = Field(ge=0, le=10_000)
     tier_order: list[str] = Field(max_length=20)
