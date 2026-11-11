@@ -32,7 +32,6 @@ export default function Hub() {
       <section className="hero">
         <h1>Bem-vindo</h1>
         <p className="muted" style={{ maxWidth: 620 }}>Torneios, histórico e jogadores da comunidade Pokémon. Escolha por onde começar.</p>
-        {!user && <Link className="btn" to="/entrar">Entrar</Link>}
       </section>
       <div className="grid cols-2">
         {cards.map((c) => (

@@ -49,7 +49,7 @@ export default function ArchiveEntry() {
         </p>
       )}
 
-      <div className="grid cols-2">
+      <div className="grid cols-2" style={{ alignItems: "start", marginTop: "1rem" }}>
         <section className="card">
           <h2>Informações</h2>
           <dl className="kv">

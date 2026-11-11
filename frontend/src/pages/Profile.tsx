@@ -14,8 +14,10 @@ function FinishList({ items, empty }: { items: Finish[]; empty: string }) {
           {items.map((f) => (
             <tr key={f.archive_id}>
               <td><span className={`pos ${f.position === 1 ? "p1" : f.position <= 3 ? "q" : ""}`}>{f.position}</span></td>
-              <td><Link to={`/acervo/${f.archive_id}`}>{f.name}</Link>{f.label && <span className="muted small"> · {f.label}</span>}</td>
-              <td className="muted small nowrap right">{fmtDay(f.date)}</td>
+              <td>
+                <Link to={`/acervo/${f.archive_id}`}>{f.name}</Link>
+                <div className="muted small">{[f.label, f.date ? fmtDay(f.date) : null].filter(Boolean).join(" · ")}</div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -68,7 +70,7 @@ export default function Profile() {
           ))}
         </section>
       )}
-      <div className="grid cols-2">
+      <div className="grid cols-2" style={{ alignItems: "start" }}>
         <section className="card"><h2>🏆 Títulos</h2><FinishList items={d.titles} empty="Nenhum título ainda." /></section>
         <section className="card"><h2>Pódios</h2><FinishList items={d.podiums} empty="Nenhum pódio ainda." /></section>
       </div>
