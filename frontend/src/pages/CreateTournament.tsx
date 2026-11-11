@@ -4,7 +4,7 @@ import { api, type TournamentDetail } from "../api";
 import CustomBuilder, { analyze, initialBuilder, toPayload, type Builder, type ParentStage } from "../components/CustomBuilder";
 import { useAction } from "../components/ui";
 import { useLoad } from "../hooks";
-import { template } from "../labels";
+import { template, tiebreakLabel } from "../labels";
 
 export default function CreateTournament() {
   const [params] = useSearchParams();
@@ -40,6 +40,19 @@ export default function CreateTournament() {
   const [repPos, setRepPos] = useState("");
   const [repSlots, setRepSlots] = useState("0");
 
+  const [koBestOf, setKoBestOf] = useState("");
+  const [homeRules, setHomeRules] = useState(false);
+  const [minCap, setMinCap] = useState("40");
+  const [seriesSaldo, setSeriesSaldo] = useState("none");
+  const [tiebreakers, setTiebreakers] = useState<string[]>(["saldo", "vitorias", "confronto_direto"]);
+
+  /** Preenche o formato do Draft (edital): 8 jogadores, 2 grupos de 4 em turno e returno, semifinais/final/3º em md3. */
+  const draftPreset = () => {
+    setTpl("groups_knockout"); setMaxPlayers("8"); setGroups("2"); setQualifiers("2"); setRepPos(""); setRepSlots("0");
+    setDoubleRound(true); setThird(true); setAllowDraw("yes"); setBestOf("1"); setKoBestOf("3");
+    setHomeRules(true); setMinCap("40"); setSeriesSaldo("games"); setTiebreakers(["confronto_direto", "saldo", "sorteio"]);
+  };
+
   const [format, setFormat] = useState("");
   const [game, setGame] = useState("");
   const [tier, setTier] = useState("");
@@ -73,6 +86,11 @@ export default function CreateTournament() {
           qualifiers_per_group: Number(qualifiers),
           repechage_position: num(repPos),
           repechage_slots: Number(repSlots),
+          knockout_best_of: tpl === "groups_knockout" && koBestOf ? Number(koBestOf) : null,
+          home_rules: homeRules,
+          home_min_turn_cap: Number(minCap) || 40,
+          series_saldo: seriesSaldo,
+          tiebreakers,
         },
       };
       if (tpl === "custom") {
@@ -89,6 +107,12 @@ export default function CreateTournament() {
       <h1>{parent ? "Novo subtorneio (repescagem)" : "Novo torneio"}</h1>
       {parent && <p className="muted">Subtorneio do <Link to={`/torneios/${parent}`}>torneio #{parent}</Link>. Para devolver jogadores ao principal, a fase de destino dele precisa ter vagas reservadas para quem volta da repescagem (definidas ao criar o torneio principal).</p>}
       {box}
+      {!parent && (
+        <div className="alert">
+          Atalho: <button type="button" className="btn small" onClick={draftPreset}>Preencher com o formato do Draft</button>{" "}
+          <span className="muted small">8 jogadores, 2 grupos de 4 em turno e returno, 2 classificados por grupo, semifinais, final e 3º lugar em md3, mando de campo e desempate por confronto direto → saldo → sorteio. Dá para ajustar tudo depois.</span>
+        </div>
+      )}
 
       <div className="card">
         <h2>Formato</h2>
@@ -126,8 +150,47 @@ export default function CreateTournament() {
             <div className="field"><label>Classificados por grupo</label><input type="number" min={1} value={qualifiers} onChange={(e) => setQualifiers(e.target.value)} /></div>
             <div className="field"><label>Posição que vai à repescagem</label><input type="number" min={1} value={repPos} onChange={(e) => setRepPos(e.target.value)} placeholder="nenhuma" /></div>
             <div className="field"><label>Vagas de repescagem no mata-mata</label><input type="number" min={0} value={repSlots} onChange={(e) => setRepSlots(e.target.value)} /></div>
+            <div className="field"><label>Melhor de no mata-mata</label>
+              <select value={koBestOf} onChange={(e) => setKoBestOf(e.target.value)}>
+                <option value="">Igual aos grupos</option>{[1, 3, 5, 7].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Partidas, saldo e desempate</h2>
+        <div className="field inline"><input id="home" type="checkbox" checked={homeRules} onChange={(e) => setHomeRules(e.target.checked)} /><label htmlFor="home">Mando de campo</label></div>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Com mando de campo, cada confronto tem um mandante (sorteado; no returno o mando se inverte). Antes da partida ele
+          escolhe o formato (1v1 ou 2v2), se é melhor de 3, o teto de empate e se o chat é aberto. Em fases que já são
+          melhor de 3 ou mais, o md3 é obrigatório.
+        </p>
+        {homeRules && (
+          <div className="field" style={{ maxWidth: 260 }}><label>Teto de empate mínimo (turnos)</label><input type="number" min={1} max={1000} value={minCap} onChange={(e) => setMinCap(e.target.value)} /></div>
+        )}
+        <div className="field" style={{ maxWidth: 420 }}><label>Saldo em séries (melhor de 3 ou mais)</label>
+          <select value={seriesSaldo} onChange={(e) => setSeriesSaldo(e.target.value)}>
+            <option value="none">Não conta saldo</option>
+            <option value="games">Jogos ganhos menos jogos perdidos (2 × 0 = +2)</option>
+          </select>
+        </div>
+        <div className="field"><label>Desempate (depois dos pontos), em ordem</label>
+          <div className="row">
+            {[0, 1, 2, 3].map((i) => (
+              <select key={i} style={{ maxWidth: 190 }} value={tiebreakers[i] ?? ""} onChange={(e) => {
+                const next = [...tiebreakers];
+                if (e.target.value) next[i] = e.target.value; else next.splice(i);
+                setTiebreakers(next.filter((x, k) => x && next.indexOf(x) === k));
+              }}>
+                <option value="">{i === 0 ? "—" : "(nenhum)"}</option>
+                {Object.entries(tiebreakLabel).map(([k, v]) => <option key={k} value={k}>{`${i + 1}º: ${v}`}</option>)}
+              </select>
+            ))}
+          </div>
+          <span className="muted small">Saldo em melhor de 1 = Pokémon restantes. "Sorteio" é feito pelo sistema com a semente do sorteio do torneio (sempre o mesmo resultado).</span>
+        </div>
       </div>
 
       {tpl === "custom" && (

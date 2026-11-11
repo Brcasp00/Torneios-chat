@@ -31,6 +31,7 @@ Serve para consultar antes de mudar algo, para explicar a alguém como usar, ou 
 22. [O que ainda não existe na interface](#22-o-que-ainda-não-existe-na-interface)
 23. [Glossário](#23-glossário)
 24. [Tela inicial, acervo, séries e perfis dos jogadores](#24-tela-inicial-acervo-séries-e-perfis-dos-jogadores)
+25. [Mando de campo e escolhas do mandante](#25-mando-de-campo-e-escolhas-do-mandante)
 
 ---
 
@@ -301,9 +302,13 @@ Mudar só os Pokémon restantes (mesmo vencedor) é sempre permitido.
 - A tabela **nunca é guardada pronta**: é **recalculada** a partir dos confrontos validados toda vez que alguém a abre.
   Por isso uma correção reflete na hora.
 - **Pontos:** vitória 3, empate 1, derrota 0 (configurável).
-- **Saldo** = Pokémon vivos do jogador − Pokémon vivos do adversário, somado jogo a jogo. **Só conta em melhor de 1**.
+- **Saldo** = Pokémon vivos do jogador − Pokémon vivos do adversário, somado jogo a jogo, em melhor de 1. Em séries
+  (melhor de 3 ou mais), por padrão não conta; o torneio pode escolher **"jogos ganhos menos jogos perdidos"** (2×0 = +2,
+  2×1 = +1 para o vencedor e −1 para o perdedor). Empate (0×0) não dá saldo a ninguém.
 - **Desempate** (ordem padrão): saldo → vitórias → **confronto direto** (pontos só nos jogos entre os empatados).
-  Persistindo o empate, ordem alfabética.
+  A ordem é escolhida na criação do torneio e pode incluir **sorteio**: feito pelo sistema com a semente do sorteio do
+  torneio (sempre dá o mesmo resultado, ninguém consegue "sortear de novo"). Sem sorteio na lista, persistindo o empate,
+  vale a ordem alfabética.
 - A coluna **J** (jogos disputados) mostra quem tem jogo a menos (útil com jogos adiados).
 - Jogador que desistiu aparece marcado na tabela.
 
@@ -721,3 +726,26 @@ página do confronto, no chaveamento, na lista de inscritos e no acervo. O perfi
 A personalização do perfil pelo próprio jogador (foto, nick do Showdown, Discord...) ainda será definida. Imagens (perfil,
 acervo e uma possível galeria) usarão um serviço de arquivos — sugestão: **Supabase Storage** (não muda o banco de dados).
 
+---
+
+## 25. Mando de campo e escolhas do mandante
+
+Opção do torneio ("Mando de campo", na criação; usada no Draft). Com ela ligada:
+
+- **Quem é o mandante:** em pontos corridos e grupos, o mando vem do sorteio da tabela e **se inverte no returno**
+  (cada dupla joga uma vez na casa de cada um). No mata-mata, rodada única e playoff, o mandante de cada confronto é
+  sorteado pelo sistema com a semente do torneio.
+- **O que o mandante escolhe** (na página do confronto, antes de jogar): formato (**1v1 tradicional** ou **2v2**), se a
+  partida é **melhor de 3**, o **teto de empate** em turnos (mínimo configurável, padrão 40) e se o **chat** é aberto ou a
+  partida é privada. Tudo fica registrado e visível para todos, e aparece na linha do tempo do confronto.
+- O md3 escolhido vale **uma partida** na tabela (3, 1 ou 0 pontos). No md3 o teto de empate fica **suspenso**.
+- Em fases que já são melhor de 3 ou mais (ex.: semifinais, final e 3º lugar do Draft), o md3 é obrigatório: o mandante
+  escolhe o resto, mas não volta para partida única.
+- As escolhas podem ser mudadas até o resultado ser reportado. Depois disso ficam travadas (se o resultado for
+  invalidado, voltam a poder ser mudadas). A organização também pode registrá-las.
+- A plataforma **só registra** formato, teto e chat (não confere no Showdown); quem confere é a organização.
+
+**Atalho "formato do Draft"** na criação de torneio: 8 jogadores, 2 grupos de 4 em turno e returno, 2 classificados por
+grupo, semifinais (1º de um grupo × 2º do outro), final e disputa de 3º lugar em md3, mando de campo, saldo das séries
+por jogos e desempate confronto direto → saldo → sorteio. A economia do Draft (caixa, elenco, leilão, CT) ainda não
+existe na plataforma.

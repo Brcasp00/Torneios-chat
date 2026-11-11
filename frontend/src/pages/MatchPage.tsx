@@ -4,7 +4,7 @@ import { api, type MatchDetail, type Report, type TimelineEvent } from "../api";
 import { useAuth } from "../auth";
 import { Badge, ErrorBox, Loading, PlayerLink, useAction } from "../components/ui";
 import { useLoad } from "../hooks";
-import { actionLabel, fmtDate, matchStatus } from "../labels";
+import { actionLabel, battleFormat, chatLabel, fmtDate, matchStatus } from "../labels";
 
 export default function MatchPage() {
   const { id } = useParams();
@@ -54,6 +54,7 @@ export default function MatchPage() {
           </div>
           <div style={{ fontSize: "1.4rem", fontWeight: 800, color: winner?.id === m.player2?.id ? "var(--accent)" : undefined }}>{m.player2 ? <PlayerLink id={m.player2.id} name={m.player2.name} /> : "A definir"}</div>
         </div>
+        {m.home_rules && m.home && ready && <HomeSummary m={m} />}
         {decided && bo === 1 && !m.is_draw && <p className="center muted">Pokémon restantes: {m.p1_remaining} × {m.p2_remaining}</p>}
         {winner && <p className="center">Vencedor: <strong>{winner.name}</strong></p>}
         {m.postponed && m.postponed_reason && <div className="alert warn">Adiado: {m.postponed_reason}</div>}
@@ -73,6 +74,7 @@ export default function MatchPage() {
         {m.deadline_waived && !decided && <div className="alert ok">O organizador liberou a entrega deste jogo depois do prazo.</div>}
       </div>
 
+      {m.home_rules && ready && !decided && m.status !== "void" && (m.can_set_settings || m.can_manage || [m.player1?.id, m.player2?.id].includes(user?.id)) && <HomeSettingsForm m={m} onDone={refresh} />}
       {reportBlocked && <div className="alert">{reportBlocked}</div>}
       {m.can_report && ready && !decided && m.tournament_status === "running" && <ReportForm m={m} onDone={refresh} />}
       {m.can_manage && ready && <StaffPanel m={m} onDone={refresh} />}
@@ -208,6 +210,86 @@ function StaffPanel({ m, onDone }: { m: MatchDetail; onDone: () => void }) {
         {m.postponed && !decided && <button className="btn" disabled={busy} onClick={() => act(() => api(`/matches/${m.id}/resume`, { method: "POST", body: {} }), "Adiamento removido.")}>Remover adiamento</button>}
       </div>
       <p className="muted small" style={{ marginTop: ".6rem" }}>Adiar só vale para pontos corridos e fase de grupos. A fase não encerra enquanto houver jogo adiado pendente.</p>
+    </div>
+  );
+}
+
+function homePlayer(m: MatchDetail) {
+  return m.home === 1 ? m.player1 : m.home === 2 ? m.player2 : null;
+}
+
+/** Quem é o mandante e o que ele escolheu (registro público). */
+function HomeSummary({ m }: { m: MatchDetail }) {
+  const h = homePlayer(m);
+  const st = m.settings;
+  return (
+    <p className="center small" style={{ margin: "0 0 .6rem" }}>
+      Mandante: <strong>{h?.name}</strong>
+      {st ? (
+        <span className="muted">
+          {" · "}{battleFormat[st.format] ?? st.format}
+          {" · "}{st.best_of > 1 ? `melhor de ${st.best_of} (sem teto de empate)` : `teto de empate: ${st.turn_cap} turnos`}
+          {" · "}{chatLabel[st.chat] ?? st.chat}
+        </span>
+      ) : <span className="muted"> · escolhas ainda não definidas</span>}
+    </p>
+  );
+}
+
+/** Escolhas do mandante: formato, md3, teto de empate e chat. Só antes do reporte. */
+function HomeSettingsForm({ m, onDone }: { m: MatchDetail; onDone: () => void }) {
+  const st = m.settings;
+  const fixed = m.stage_best_of > 1;
+  const [format, setFormat] = useState<string>(st?.format ?? "singles");
+  const [bo3, setBo3] = useState<boolean>(fixed || (st ? st.best_of > 1 : false));
+  const [cap, setCap] = useState<string>(String(st?.turn_cap ?? m.home_min_turn_cap));
+  const [chat, setChat] = useState<string>(st?.chat ?? "open");
+  const { run, busy, box, setMsg } = useAction();
+  const h = homePlayer(m);
+  const series = fixed || bo3;
+
+  const save = async () => {
+    if (!m.can_set_settings) { setMsg({ kind: "error", text: m.settings_blocked ?? "Você não pode definir as escolhas deste confronto." }); return; }
+    if (!series && (!cap.trim() || Number(cap) < m.home_min_turn_cap)) {
+      setMsg({ kind: "error", text: `O teto de empate deve ter no mínimo ${m.home_min_turn_cap} turnos.` });
+      return;
+    }
+    const body = { format, best_of: series ? 3 : 1, turn_cap: series ? null : Number(cap), chat };
+    if (await run(() => api(`/matches/${m.id}/settings`, { method: "PUT", body }), "Escolhas do mandante registradas.")) onDone();
+  };
+
+  return (
+    <div className="card">
+      <h2>Escolhas do mandante</h2>
+      <p className="muted small">
+        O mandante (<strong>{h?.name}</strong>) define antes da partida o formato, se é melhor de 3, o teto de empate
+        (mínimo {m.home_min_turn_cap} turnos; suspenso em md3) e o chat. As escolhas ficam registradas para os dois jogadores
+        e não mudam depois que o resultado é reportado.
+      </p>
+      {box}
+      {!m.can_set_settings && m.settings_blocked && <div className="alert">{m.settings_blocked}</div>}
+      <div className="form-grid">
+        <div className="field"><label>Formato</label>
+          <select value={format} onChange={(e) => setFormat(e.target.value)}>
+            {Object.entries(battleFormat).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <div className="field"><label>Melhor de 3?</label>
+          <select value={series ? "3" : "1"} onChange={(e) => setBo3(e.target.value === "3")} disabled={fixed}>
+            <option value="1">Não (partida única)</option><option value="3">Sim (md3)</option>
+          </select>
+          {fixed && <span className="muted small">Esta fase é sempre melhor de {m.stage_best_of}.</span>}
+        </div>
+        <div className="field"><label>Teto de empate (turnos)</label>
+          {series ? <input value="suspenso no md3" disabled /> : <input type="number" min={m.home_min_turn_cap} value={cap} onChange={(e) => setCap(e.target.value)} />}
+        </div>
+        <div className="field"><label>Chat</label>
+          <select value={chat} onChange={(e) => setChat(e.target.value)}>
+            {Object.entries(chatLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+      </div>
+      <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Salvando…" : st ? "Atualizar escolhas" : "Registrar escolhas"}</button>
     </div>
   );
 }

@@ -41,6 +41,7 @@ export const actionLabel: Record<string, string> = {
   "match.invalidate": "Resultado invalidado",
   "match.postpone": "Jogo adiado",
   "match.resume": "Adiamento removido",
+  "match.settings": "Escolhas do mandante definidas",
   "report.validated": "Reporte aprovado",
   "report.rejected": "Reporte rejeitado",
   "match.auto_draw": "Empate automático por prazo vencido",
@@ -94,3 +95,10 @@ export function fmtPeriod(start: string | null, end: string | null): string {
   if (start && end && start !== end) return `${fmtDay(start)} a ${fmtDay(end)}`;
   return start || end ? fmtDay(start || end) : "data não informada";
 }
+
+export const tiebreakLabel: Record<string, string> = {
+  confronto_direto: "Confronto direto", saldo: "Saldo", vitorias: "Vitórias", sorteio: "Sorteio",
+};
+
+export const battleFormat: Record<string, string> = { singles: "1v1 tradicional", doubles: "2v2" };
+export const chatLabel: Record<string, string> = { open: "Chat aberto", private: "Partida privada" };

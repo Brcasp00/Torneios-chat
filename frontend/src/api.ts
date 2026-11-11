@@ -106,9 +106,12 @@ export interface Match {
   winner_id: number | null; is_draw: boolean; is_walkover: boolean; validated_at: string | null; has_pending_report: boolean;
   postponed: boolean; postponed_reason: string | null;
   deadline: string | null; overdue: boolean; auto_result: boolean; deadline_waived: boolean;
+  home: 1 | 2 | null; settings: MatchSettings | null;
 }
+export interface MatchSettings { format: "singles" | "doubles"; best_of: number; turn_cap: number | null; chat: "open" | "private"; set_by?: number; set_at?: string }
 export interface Report { id: number; reported_by: number | null; p1_wins: number; p2_wins: number; p1_remaining: number; p2_remaining: number; replay_urls: string[] | null; notes: string | null; status: string; created_at: string; reviewed_by: number | null; reviewed_at: string | null; review_note: string | null }
-export interface MatchDetail extends Match { tournament_name: string; tournament_status: string; stage_name: string; battle_rules: Record<string, unknown> | null; reports: Report[]; can_report: boolean; can_manage: boolean }
+export interface MatchDetail extends Match { tournament_name: string; tournament_status: string; stage_name: string; battle_rules: Record<string, unknown> | null; reports: Report[]; can_report: boolean; can_manage: boolean;
+  home_rules: boolean; home_min_turn_cap: number; stage_best_of: number; can_set_settings: boolean; settings_blocked: string | null }
 export interface TimelineEvent { at: string; kind: string; actor_id: number | null; actor_name: string | null; action: string; data: Record<string, unknown> | null }
 
 export interface StandingRow { position: number; user_id: number; name: string; withdrawn: boolean; played: number; wins: number; draws: number; losses: number; points: number; saldo: number }
