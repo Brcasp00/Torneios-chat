@@ -42,6 +42,14 @@ export const actionLabel: Record<string, string> = {
   "match.postpone": "Jogo adiado",
   "match.resume": "Adiamento removido",
   "match.settings": "Escolhas do mandante definidas",
+  "draft.setup": "Draft configurado",
+  "draft.add_pokemon": "Pokémon adicionados ao lote",
+  "draft.update_pokemon": "Pokémon do lote editado",
+  "draft.remove_pokemon": "Pokémon tirado do lote",
+  "draft.assign": "Compra registrada (Draft)",
+  "draft.unassign": "Compra desfeita (Draft)",
+  "draft.sponsors": "Patrocinadores informados",
+  "draft.adjust": "Ajuste de caixa (Draft)",
   "report.validated": "Reporte aprovado",
   "report.rejected": "Reporte rejeitado",
   "match.auto_draw": "Empate automático por prazo vencido",
@@ -102,3 +110,20 @@ export const tiebreakLabel: Record<string, string> = {
 
 export const battleFormat: Record<string, string> = { singles: "1v1 tradicional", doubles: "2v2" };
 export const chatLabel: Record<string, string> = { open: "Chat aberto", private: "Partida privada" };
+
+/** euros inteiros -> "30,00M" (milhões, vírgula decimal, sinal negativo visível). */
+export function fmtM(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return `${(n / 1_000_000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}M`;
+}
+/** "30" ou "1,5" (milhões) -> euros inteiros; null se vazio/inválido. */
+export function parseM(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+  const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+  return Number.isFinite(n) ? Math.round(n * 1_000_000) : null;
+}
+export const positionLabel: Record<string, string> = { defensor: "Defensor", meio: "Meio-campo", atacante: "Atacante" };
+export const POSITIONS = ["defensor", "meio", "atacante"] as const;
+export const txKind: Record<string, string> = { purchase: "Compra", correction: "Correção", adjustment: "Ajuste manual" };
+export const viaLabel: Record<string, string> = { auction: "Leilão", market: "Mercado", transfer: "Transferência" };

@@ -6,6 +6,8 @@ import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 import CreateTournament from "./pages/CreateTournament";
 import CreateUser from "./pages/CreateUser";
+import DraftClubPage from "./pages/DraftClubPage";
+import DraftPokemonPage from "./pages/DraftPokemonPage";
 import Archive from "./pages/Archive";
 import ArchiveEntry from "./pages/ArchiveEntry";
 import ArchiveForm from "./pages/ArchiveForm";
@@ -77,6 +79,8 @@ export default function App() {
           <Route path="/torneios" element={<Tournaments />} />
           <Route path="/torneios/novo" element={<RequireAuth staff><CreateTournament /></RequireAuth>} />
           <Route path="/torneios/:id" element={<TournamentPage />} />
+          <Route path="/torneios/:id/pokemon/:pid" element={<DraftPokemonPage />} />
+          <Route path="/torneios/:id/clubes/:uid" element={<DraftClubPage />} />
           <Route path="/matches/:id" element={<MatchPage />} />
           <Route path="/acervo" element={<Archive />} />
           <Route path="/acervo/novo" element={<RequireAuth admin><ArchiveForm /></RequireAuth>} />

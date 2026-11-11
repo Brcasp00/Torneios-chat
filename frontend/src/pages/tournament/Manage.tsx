@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { Badge, useAction } from "../../components/ui";
 import { useLoad } from "../../hooks";
 import { toLocalInput, tournamentStatus } from "../../labels";
+import { DraftSetupCard } from "./Draft";
 
 const NEXT_STATUS: Record<string, { to: string; label: string; danger?: boolean }[]> = {
   draft: [{ to: "registration", label: "Abrir inscrições" }, { to: "cancelled", label: "Cancelar torneio", danger: true }],
@@ -24,6 +25,7 @@ export default function Manage({ t, onChanged }: { t: TournamentDetail; onChange
       {t.status === "running" && <PostponeCard t={t} onChanged={onChanged} />}
       {t.status !== "finished" && t.status !== "cancelled" && <DeadlinesCard t={t} onChanged={onChanged} />}
       <SubtournamentsCard t={t} onChanged={onChanged} />
+      {!t.parent_id && t.status !== "finished" && t.status !== "cancelled" && <DraftSetupCard t={t} onChanged={onChanged} />}
     </div>
   );
 }

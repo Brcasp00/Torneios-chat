@@ -159,3 +159,16 @@ export interface Profile {
   titles: Finish[]; podiums: Finish[]; archive: Finish[];
   current: { tournament_id: number; name: string; status: string; player_status: string }[];
 }
+
+// ---------- Draft ----------
+export type DraftPosition = "defensor" | "meio" | "atacante";
+export interface DraftPokemon {
+  id: number; species_id: string; name: string; num: number | null; types: string[]; region: string | null; tier9: string | null; tier7: string | null;
+  draft_tier: string | null; price: number | null; positions: DraftPosition[]; costs: Partial<Record<DraftPosition, number>>;
+  owner: PlayerRef | null; contract_price: number | null; salary: number | null; acquired_via: string | null; acquired_at: string | null; registered: boolean;
+}
+export interface DraftTransaction { id: number; user: PlayerRef | null; kind: string; amount: number; pokemon_id: number | null; pokemon_name: string | null; round: number | null; note: string | null; created_by: PlayerRef | null; created_at: string }
+export interface DraftClub { user: PlayerRef; cash: number; transferban: boolean; squad_count: number; registered_count: number; squad_value: number; salary_per_round: number; sponsors: string[]; ct_level: number }
+export interface DraftOverview { enabled: boolean; regions: string[]; economy: Record<string, unknown> & { initial_budget: number; max_squad: number; max_registered: number; sponsors: number } | null; clubs: DraftClub[]; lote_count: number; free_count: number; can_manage: boolean }
+export interface DraftPokemonDetail extends DraftPokemon { transactions: DraftTransaction[] }
+export interface DraftClubDetail extends DraftClub { squad: DraftPokemon[]; transactions: DraftTransaction[]; can_edit: boolean }

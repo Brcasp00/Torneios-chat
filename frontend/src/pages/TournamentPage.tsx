@@ -5,13 +5,14 @@ import { Badge, ErrorBox, Loading, Tabs } from "../components/ui";
 import { useLoad } from "../hooks";
 import { template, tournamentStatus } from "../labels";
 import Bracket from "./tournament/Bracket";
+import { DraftClubsTab, DraftPokemonTab } from "./tournament/Draft";
 import History from "./tournament/History";
 import Manage from "./tournament/Manage";
 import Matches from "./tournament/Matches";
 import Overview from "./tournament/Overview";
 import Standings from "./tournament/Standings";
 
-type Tab = "overview" | "standings" | "bracket" | "matches" | "history" | "manage";
+type Tab = "overview" | "standings" | "bracket" | "matches" | "pokemon" | "clubs" | "history" | "manage";
 
 export default function TournamentPage() {
   const { id } = useParams();
@@ -31,7 +32,9 @@ export default function TournamentPage() {
   const tabs: { id: Tab; label: string }[] = [{ id: "overview", label: "Visão geral" }];
   if (hasTable) tabs.push({ id: "standings", label: "Tabela" });
   if (hasBracket) tabs.push({ id: "bracket", label: "Chaveamento" });
-  tabs.push({ id: "matches", label: "Confrontos" }, { id: "history", label: "Histórico" });
+  tabs.push({ id: "matches", label: "Confrontos" });
+  if (t.config?.draft) tabs.push({ id: "pokemon", label: "Pokémon" }, { id: "clubs", label: "Clubes" });
+  tabs.push({ id: "history", label: "Histórico" });
   if (t.can_manage) tabs.push({ id: "manage", label: "Gerenciar" });
   const current = tabs.some((x) => x.id === tab) ? tab : "overview";
 
@@ -59,6 +62,8 @@ export default function TournamentPage() {
       {current === "standings" && <Standings t={t} />}
       {current === "bracket" && <Bracket t={t} />}
       {current === "matches" && <Matches t={t} />}
+      {current === "pokemon" && <DraftPokemonTab t={t} />}
+      {current === "clubs" && <DraftClubsTab t={t} />}
       {current === "history" && <History t={t} />}
       {current === "manage" && <Manage t={t} onChanged={() => void d.reload()} />}
     </>

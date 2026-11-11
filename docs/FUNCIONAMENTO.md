@@ -34,6 +34,7 @@ Serve para consultar antes de mudar algo, para explicar a alguém como usar, ou 
 25. [Mando de campo e escolhas do mandante](#25-mando-de-campo-e-escolhas-do-mandante)
 26. [Calculadora da temporada (Draft)](#26-calculadora-da-temporada-draft)
 27. [Pokédex (catálogo de Pokémon)](#27-pokédex-catálogo-de-pokémon)
+28. [Draft: lote de Pokémon, leilão e clubes](#28-draft-lote-de-pokémon-leilão-e-clubes)
 
 ---
 
@@ -803,3 +804,41 @@ número, nome, tipos, região e os tiers **lado a lado: Geração 9 National Dex
   publicar a nova versão.
 - Na National Dex da Geração 9 os tiers só vão até **RU**: tudo abaixo aparece como RU. Os tiers menores (NU, PU, ZU)
   existem na coluna da Geração 7.
+
+---
+
+## 28. Draft: lote de Pokémon, leilão e clubes
+
+**Ligar:** aba Gerenciar → cartão "Modo Draft" → escolher as **regiões** do lote → "Ligar modo Draft". O torneio ganha
+as abas **Pokémon** e **Clubes**. Os valores econômicos (orçamento de € 500 mi, salário de 5%…) vêm do arquivo de
+configuração do servidor. Editar o formato do torneio depois não desliga o Draft.
+
+**Lote (aba Pokémon):** a organização adiciona Pokémon da Pokédex, só das regiões escolhidas (dá para marcar vários ou
+todos os filtrados de uma vez). Para cada um, a organização define, no painel do Pokémon:
+- **tier do Draft** e **preço de referência** — os tiers da Smogon (Gen 9 National Dex / Gen 7) aparecem só como
+  referência;
+- **posição(ões) própria(s)** (defensor, meio-campo, atacante) e o **custo em pontos** jogando em cada posição.
+
+**Painel de cada Pokémon** (público): dono, valor do contrato atual, salário por rodada (5% do contrato), origem
+(leilão ou mercado) e data, se está inscrito, posições e custo por posição, referência da Smogon e o histórico de
+movimentações daquele Pokémon.
+
+**Leilão:** acontece no Discord. A organização registra no painel do Pokémon quem levou e quanto pagou. O valor sai do
+caixa do clube. A plataforma recusa:
+- Pokémon que já tem dono;
+- comprador que não é jogador ativo do torneio;
+- elenco cheio (15);
+- clube em **transferban** (caixa negativo);
+- valor maior que o caixa, a não ser que a organização marque "permitir caixa negativo" (o clube entra em transferban).
+
+Registro errado: "Desfazer registro" devolve o valor ao caixa (fica como **correção** nas movimentações) e libera o
+Pokémon. Pokémon com dono não sai do lote.
+
+**Clubes:** caixa = orçamento inicial + todas as movimentações (nunca guardado pronto, sempre recalculado). A página de
+cada clube mostra caixa, elenco, inscritos, valor do elenco, salários por rodada, **patrocinadores** (até 5, informados
+pelo próprio jogador ou pela organização) e todas as movimentações. A organização pode fazer **ajustes de caixa** (entrada
+ou saída, com motivo) enquanto as cobranças e rendas automáticas por rodada não existem.
+
+Ainda não existe na plataforma (próximas partes): inscrição dos Pokémon com a taxa, cobranças e rendas automáticas por
+rodada, pedido de Pokémon livre no mercado, dispensa, CT e treinamentos, janela de transferências/empréstimos e a
+escalação com pontos.
