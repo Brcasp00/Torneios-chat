@@ -153,6 +153,7 @@ async def start_tournament(tournament_id: int, data: DrawIn, user: StaffUser, se
     seed = data.seed or schedule.new_seed()
     pots = await _pots(session, t)
     plan = _plan_or_409(stage, [uid for uid, _ in players], seed, data, pots)
+    t.config = {**(t.config or {}), "draw_seed": seed}  # o mando de campo dos confrontos usa a semente
     created = await stage_service.materialize(session, t.id, stage, plan)
     if plan.seeds or plan.bracket_slots is not None:
         seeds = plan.seeds or {uid: pos for pos, uid in enumerate(plan.bracket_slots, start=1)}

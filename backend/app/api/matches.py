@@ -7,6 +7,7 @@ from app.core.deps import CurrentUser, OptionalUser, SessionDep, StaffUser
 from app.models import AuditLog, Match, MatchReport, Stage, Tournament, TournamentPlayer, User
 from app.schemas.match import (
     MatchDetail,
+    MatchSettingsIn,
     NoteIn,
     PostponeIn,
     ReportIn,
@@ -54,6 +55,28 @@ def _log(session, user, action, m, data=None):
     session.add(AuditLog(actor_id=user.id, action=action, entity="match", entity_id=m.id, data=data))
 
 
+def _stage_best_of(stage: Stage) -> int:
+    return (stage.config or {}).get("best_of", 1)
+
+
+def _settings_block(m: Match, t: Tournament, user: User | None) -> str | None:
+    """Motivo pelo qual o usuário não pode definir as escolhas do mandante agora (None = pode)."""
+    if not (t.config or {}).get("home_rules"):
+        return "Este torneio não usa mando de campo."
+    if user is None:
+        return "Entre na sua conta para definir as escolhas do mandante."
+    if t.status != "running":
+        return "O torneio não está em andamento."
+    if not (m.player1_id and m.player2_id):
+        return "Aguardando a definição do adversário."
+    if m.status != "scheduled":
+        return "As escolhas do mandante só podem ser feitas antes de o resultado ser reportado."
+    home_id = m.player1_id if m.home == 1 else m.player2_id if m.home == 2 else None
+    if user.id != home_id and not can_manage(user, t):
+        return "Só o mandante deste confronto (ou a organização) define formato, md3, teto de empate e chat."
+    return None
+
+
 async def _detail(session, m: Match, t: Tournament, stage: Stage, user: User | None) -> MatchDetail:
     base = (await matches_out(session, [m]))[0]
     reports = (
@@ -70,6 +93,7 @@ async def _detail(session, m: Match, t: Tournament, stage: Stage, user: User | N
             )
             == "active"
         )
+    block = _settings_block(m, t, user)
     return MatchDetail(
         **base.model_dump(),
         tournament_name=t.name,
@@ -82,6 +106,11 @@ async def _detail(session, m: Match, t: Tournament, stage: Stage, user: User | N
             and m.status in ("scheduled", "reported")
         ),
         can_manage=can_manage(user, t),
+        home_rules=bool((t.config or {}).get("home_rules")),
+        home_min_turn_cap=(t.config or {}).get("home_min_turn_cap", 40),
+        stage_best_of=_stage_best_of(stage),
+        can_set_settings=block is None,
+        settings_blocked=block,
     )
 
 
@@ -90,6 +119,36 @@ async def get_match(match_id: int, session: SessionDep, user: OptionalUser):
     m, t, stage = await _load(session, match_id)
     await deadlines.safe_sweep(session, t)
     m, t, stage = await _load(session, match_id)
+    return await _detail(session, m, t, stage, user)
+
+
+@router.put("/{match_id}/settings", response_model=MatchDetail)
+async def set_settings(match_id: int, data: MatchSettingsIn, user: CurrentUser, session: SessionDep):
+    """Escolhas do mandante antes da partida: formato (1v1/2v2), md3, teto de empate e chat.
+
+    Ficam registradas para os dois jogadores verem. O md3 muda o confronto para melhor de 3 (o teto de empate é
+    suspenso). Em fases que já são melhor de 3 ou mais (ex.: semifinais), o mandante não muda isso.
+    """
+    m, t, stage = await _load(session, match_id, lock=True)
+    block = _settings_block(m, t, user)
+    if block:
+        code = status.HTTP_403_FORBIDDEN if block.startswith("Só o mandante") else status.HTTP_409_CONFLICT
+        raise HTTPException(code, block)
+    fixed = _stage_best_of(stage)
+    best_of = fixed if fixed > 1 else data.best_of
+    turn_cap = None
+    if best_of == 1:
+        minimum = (t.config or {}).get("home_min_turn_cap", 40)
+        if data.turn_cap is None or data.turn_cap < minimum:
+            raise _bad(ValueError(f"Informe o teto de empate: no mínimo {minimum} turnos."))
+        turn_cap = data.turn_cap
+    m.best_of = best_of
+    m.settings = {
+        "format": data.format, "best_of": best_of, "turn_cap": turn_cap, "chat": data.chat,
+        "set_by": user.id, "set_at": results._now().isoformat(),
+    }
+    _log(session, user, "match.settings", m, {k: v for k, v in m.settings.items() if k not in ("set_by", "set_at")})
+    await session.commit()
     return await _detail(session, m, t, stage, user)
 
 

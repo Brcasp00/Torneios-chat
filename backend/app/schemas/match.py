@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -31,6 +33,15 @@ class ValidateIn(BaseModel):
 
 class NoteIn(BaseModel):
     note: str | None = Field(None, max_length=500)
+
+
+class MatchSettingsIn(BaseModel):
+    """Escolhas do mandante. O teto de empate é suspenso em md3 (fica vazio)."""
+
+    format: Literal["singles", "doubles"] = Field(description="singles = 1v1 tradicional; doubles = 2v2")
+    best_of: Literal[1, 3] = 1
+    turn_cap: int | None = Field(None, ge=1, le=1000, description="Teto de empate em turnos (obrigatório em melhor de 1)")
+    chat: Literal["open", "private"] = "open"
 
 
 class WalkoverIn(BaseModel):
@@ -83,6 +94,8 @@ class MatchOut(BaseModel):
     overdue: bool = False  # prazo vencido e ainda sem resultado/reporte (aviso para o admin)
     auto_result: bool = False  # empate marcado automaticamente por vencimento do prazo
     deadline_waived: bool = False  # admin liberou a entrega atrasada
+    home: int | None = None  # mando de campo: 1 ou 2 (qual jogador é o mandante)
+    settings: dict | None = None  # escolhas do mandante: format, best_of, turn_cap, chat
 
 
 class MatchDetail(MatchOut):
@@ -93,6 +106,11 @@ class MatchDetail(MatchOut):
     reports: list[ReportOut]
     can_report: bool = False
     can_manage: bool = False
+    home_rules: bool = False  # o torneio usa mando de campo
+    home_min_turn_cap: int = 40
+    stage_best_of: int = 1  # melhor de N da fase; se > 1 o mandante não muda
+    can_set_settings: bool = False  # o usuário pode definir as escolhas do mandante agora
+    settings_blocked: str | None = None  # por que as escolhas não podem ser alteradas (quando não pode)
 
 
 class StandingRow(BaseModel):

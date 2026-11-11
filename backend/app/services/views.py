@@ -60,6 +60,8 @@ async def matches_out(session, matches: list[Match]) -> list[MatchOut]:
             overdue=dl.is_overdue(m, deadlines.get(m.stage_id, {}), at),
             auto_result=bool(m.auto_result),
             deadline_waived=bool(m.deadline_waived),
+            home=m.home,
+            settings=m.settings,
         )
         for m in matches
     ]

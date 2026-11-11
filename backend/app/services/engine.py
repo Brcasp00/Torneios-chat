@@ -54,8 +54,8 @@ async def compute_outputs(session, t: Tournament, stage: Stage) -> dict:
             if m.winner_id is None:
                 continue
             loser = m.player2_id if m.winner_id == m.player1_id else m.player1_id
-            winners.append((-tables.pair_saldo(m, m.winner_id), key(m.winner_id), m.winner_id))
-            losers.append((-tables.pair_saldo(m, loser), key(loser), loser))
+            winners.append((-tables.pair_saldo(m, m.winner_id, t.config), key(m.winner_id), m.winner_id))
+            losers.append((-tables.pair_saldo(m, loser, t.config), key(loser), loser))
         out["winners"] = [w[-1] for w in sorted(winners)]  # maior saldo primeiro
         out["losers"] = [x[-1] for x in sorted(losers)]  # menor prejuízo primeiro
         out["ranking"] = out["winners"] + out["losers"]

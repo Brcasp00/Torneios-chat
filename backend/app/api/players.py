@@ -64,11 +64,16 @@ async def profile(user_id: int, session: SessionDep):
     ms = (await session.scalars(
         select(Match).where(Match.status == "validated", or_(Match.player1_id == u.id, Match.player2_id == u.id))
     )).all()
+    cfgs = {}
+    if ms:
+        cfgs = dict((await session.execute(
+            select(Tournament.id, Tournament.config).where(Tournament.id.in_({m.tournament_id for m in ms}))
+        )).all())
     for m in ms:
         if not (m.player1_id and m.player2_id):
             continue
         st.played += 1
-        st.saldo += standings._side_saldo(m, 1 if m.player1_id == u.id else 2)
+        st.saldo += standings._side_saldo(m, 1 if m.player1_id == u.id else 2, cfgs.get(m.tournament_id))
         if m.is_draw:
             st.draws += 1
         elif m.winner_id == u.id:

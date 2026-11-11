@@ -37,7 +37,13 @@ class TournamentConfig(BaseModel):
     qualifiers_per_group: int = Field(2, ge=1, le=16)
     repechage_position: int | None = Field(None, ge=1, le=16, description="Ex.: 3 = o 3º de cada grupo vai à repescagem")
     repechage_slots: int = Field(0, ge=0, le=64, description="Vagas do mata-mata reservadas a quem volta de um subtorneio")
-    tiebreakers: list[Literal["saldo", "vitorias", "confronto_direto"]] = ["saldo", "vitorias", "confronto_direto"]
+    tiebreakers: list[Literal["saldo", "vitorias", "confronto_direto", "sorteio"]] = ["saldo", "vitorias", "confronto_direto"]
+    knockout_best_of: Literal[1, 3, 5, 7] | None = Field(None, description="Grupos + mata-mata: melhor de N do mata-mata (padrão: o mesmo dos grupos)")
+    series_saldo: Literal["none", "games"] = Field(
+        "none", description="Saldo em séries (md3+): none = não conta; games = jogos ganhos menos jogos perdidos"
+    )
+    home_rules: bool = Field(False, description="Mando de campo: o mandante escolhe formato, md3, teto de empate e chat")
+    home_min_turn_cap: int = Field(40, ge=1, le=1000, description="Teto de empate mínimo que o mandante pode escolher")
 
 
 class StageIn(BaseModel):

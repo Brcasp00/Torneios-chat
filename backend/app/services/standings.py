@@ -1,4 +1,5 @@
 """Cálculo da tabela de classificação a partir dos confrontos validados."""
+import random
 from dataclasses import dataclass, field
 
 DEFAULT_TIEBREAKERS = ["saldo", "vitorias", "confronto_direto"]
@@ -33,12 +34,24 @@ class Row:
         }
 
 
-def _side_saldo(m, side: int) -> int:
-    """Saldo = Pokémon restantes do jogador - do adversário. Só conta em melhor de 1."""
+def _side_saldo(m, side: int, cfg: dict | None = None) -> int:
+    """Saldo do jogador no confronto.
+
+    Melhor de 1: Pokémon restantes do jogador - do adversário. Séries (md3+): não contam, a não ser que o torneio use
+    `series_saldo = "games"`, em que o saldo é jogos ganhos - jogos perdidos (ex.: 2x0 = +2; 2x1 = +1).
+    """
     if m.best_of != 1:
-        return 0
+        if (cfg or {}).get("series_saldo") != "games" or m.is_draw:
+            return 0
+        mine, theirs = (m.p1_wins, m.p2_wins) if side == 1 else (m.p2_wins, m.p1_wins)
+        return (mine or 0) - (theirs or 0)
     mine, theirs = (m.p1_remaining, m.p2_remaining) if side == 1 else (m.p2_remaining, m.p1_remaining)
     return (mine or 0) - (theirs or 0)
+
+
+def draw_key(cfg: dict, uid: int) -> float:
+    """Desempate por sorteio reproduzível: depende só da semente do torneio e do jogador."""
+    return random.Random(f"{(cfg or {}).get('draw_seed', 1)}:sorteio:{uid}").random()
 
 
 def compute(players: dict[int, tuple[str, bool]], matches, cfg: dict) -> list[Row]:
@@ -52,7 +65,7 @@ def compute(players: dict[int, tuple[str, bool]], matches, cfg: dict) -> list[Ro
         for side, uid in ((1, m.player1_id), (2, m.player2_id)):
             r = rows[uid]
             r.played += 1
-            r.saldo += _side_saldo(m, side)
+            r.saldo += _side_saldo(m, side, cfg)
             if m.is_draw:
                 r.draws += 1
                 r.points += pd
@@ -95,6 +108,8 @@ def _rank(group: list[Row], criteria: list[str], matches, cfg: dict) -> list[Row
         value = {r.user_id: r.wins for r in group}
     elif crit == "confronto_direto":
         value = _head_to_head_points({r.user_id for r in group}, matches, cfg)
+    elif crit == "sorteio":
+        return sorted(group, key=lambda r: (draw_key(cfg, r.user_id), r.user_id))
     else:
         return _rank(group, rest, matches, cfg)
 

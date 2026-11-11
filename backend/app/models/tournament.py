@@ -137,6 +137,10 @@ class Match(Base, TimestampMixin):
     # Prazo da rodada: empate automático (auto_result) e liberação do prazo pelo admin (deadline_waived).
     auto_result: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     deadline_waived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Mando de campo (torneios com config.home_rules): 1 ou 2 = qual jogador é o mandante. O mandante escolhe o formato
+    # (1v1/2v2), se é md3, o teto de empate e o chat; a escolha fica em `settings` (só registro, exceto o md3).
+    home: Mapped[int | None] = mapped_column(SmallInteger)
+    settings: Mapped[dict | None] = mapped_column(JsonType)
 
 
 class MatchReport(Base, TimestampMixin):

@@ -1,9 +1,10 @@
 """Planejamento e criação dos confrontos de cada tipo de fase (sorteio aleatório, por potes ou manual)."""
+import random
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
 
-from app.models import Match, Stage, TournamentPlayer
+from app.models import Match, Stage, Tournament, TournamentPlayer
 from app.services import bracket, schedule
 
 
@@ -257,6 +258,7 @@ async def materialize(session, tournament_id: int, stage: Stage, plan: Plan) -> 
             session.add(m)
             created.append(m)
         await session.flush()
+    await set_home(session, tournament_id, stage, created)
     for uid, label in plan.groups.items():
         tp = await session.scalar(
             select(TournamentPlayer).where(TournamentPlayer.tournament_id == tournament_id, TournamentPlayer.user_id == uid)
@@ -264,3 +266,19 @@ async def materialize(session, tournament_id: int, stage: Stage, plan: Plan) -> 
         if tp:
             tp.group_label = label
     return created
+
+
+async def set_home(session, tournament_id: int, stage: Stage, created: list[Match]) -> None:
+    """Mando de campo de cada confronto criado.
+
+    Pontos corridos/grupos: o jogador 1 é o mandante (a ordem vem do sorteio e o returno inverte os mandos).
+    Mata-mata, rodada única e playoff: sorteio reproduzível pela semente do torneio e pela posição do confronto, que
+    não depende de quem chega ao confronto.
+    """
+    t = await session.get(Tournament, tournament_id)
+    seed = (t.config or {}).get("draw_seed", 1) if t else 1
+    for m in created:
+        if stage.type in ("league", "groups"):
+            m.home = 1
+        else:
+            m.home = 1 + random.Random(f"{seed}:home:{stage.id}:{m.round}:{m.slot}:{m.group_label}").randrange(2)

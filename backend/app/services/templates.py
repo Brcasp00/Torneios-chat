@@ -47,7 +47,7 @@ def build(data: TournamentCreate) -> tuple[list[StageIn], list[RuleIn], dict]:
         stage = StageIn(
             name="Mata-mata",
             type="knockout",
-            config={"best_of": cfg["best_of"], "third_place": cfg["third_place"]},
+            config={"best_of": cfg.get("knockout_best_of") or cfg["best_of"], "third_place": cfg["third_place"]},
         )
         return [stage], [], cfg
 
@@ -78,7 +78,7 @@ def build(data: TournamentCreate) -> tuple[list[StageIn], list[RuleIn], dict]:
             f"A posição de repescagem deve ser maior que os classificados e existir em todos os grupos (o menor terá {smallest} jogadores)."
         )
 
-    ko_config = {"best_of": cfg["best_of"], "third_place": cfg["third_place"], "seeding": "sequential"}
+    ko_config = {"best_of": cfg.get("knockout_best_of") or cfg["best_of"], "third_place": cfg["third_place"], "seeding": "sequential"}
     if reserved:
         # Quem volta da repescagem ocupa as últimas vagas; a chave por seed (1xN) coloca os classificados dos grupos
         # (primeiras vagas) contra os repescados.

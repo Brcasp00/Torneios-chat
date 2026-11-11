@@ -56,8 +56,5 @@ async def table_for_stage(session, t: Tournament, stage: Stage) -> list[standing
     return standings.compute(players, [m for m in matches if m.status == "validated"], t.config or {})
 
 
-def pair_saldo(m: Match, uid: int) -> int:
-    if m.best_of != 1:
-        return 0
-    mine, theirs = (m.p1_remaining, m.p2_remaining) if uid == m.player1_id else (m.p2_remaining, m.p1_remaining)
-    return (mine or 0) - (theirs or 0)
+def pair_saldo(m: Match, uid: int, cfg: dict | None = None) -> int:
+    return standings._side_saldo(m, 1 if uid == m.player1_id else 2, cfg)
