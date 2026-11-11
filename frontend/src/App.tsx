@@ -9,6 +9,7 @@ import CreateUser from "./pages/CreateUser";
 import Archive from "./pages/Archive";
 import ArchiveEntry from "./pages/ArchiveEntry";
 import ArchiveForm from "./pages/ArchiveForm";
+import Calculator from "./pages/Calculator";
 import Hub from "./pages/Hub";
 import Login from "./pages/Login";
 import MatchPage from "./pages/MatchPage";
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="/acervo/:id" element={<ArchiveEntry />} />
           <Route path="/acervo/:id/editar" element={<RequireAuth admin><ArchiveForm /></RequireAuth>} />
           <Route path="/jogadores" element={<Players />} />
+          <Route path="/calculadora" element={<Calculator />} />
           <Route path="/jogadores/:id" element={<Profile />} />
           <Route path="/conta" element={<RequireAuth><Account /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth admin><Admin /></RequireAuth>} />

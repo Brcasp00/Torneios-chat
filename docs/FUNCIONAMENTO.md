@@ -32,6 +32,7 @@ Serve para consultar antes de mudar algo, para explicar a alguém como usar, ou 
 23. [Glossário](#23-glossário)
 24. [Tela inicial, acervo, séries e perfis dos jogadores](#24-tela-inicial-acervo-séries-e-perfis-dos-jogadores)
 25. [Mando de campo e escolhas do mandante](#25-mando-de-campo-e-escolhas-do-mandante)
+26. [Calculadora da temporada (Draft)](#26-calculadora-da-temporada-draft)
 
 ---
 
@@ -749,3 +750,34 @@ Opção do torneio ("Mando de campo", na criação; usada no Draft). Com ela lig
 grupo, semifinais (1º de um grupo × 2º do outro), final e disputa de 3º lugar em md3, mando de campo, saldo das séries
 por jogos e desempate confronto direto → saldo → sorteio. A economia do Draft (caixa, elenco, leilão, CT) ainda não
 existe na plataforma.
+
+---
+
+## 26. Calculadora da temporada (Draft)
+
+Página **/calculadora** (cartão "Calculadora da temporada" na tela inicial), aberta a qualquer visitante. É só simulação:
+nada é gravado no servidor, e o que a pessoa preenche fica salvo apenas no navegador dela.
+
+- **Configuração:** parte de um modelo — "Draft — edital atual" (€ 500 mi, 6 rodadas de grupos + 2 de mata-mata,
+  prêmios do 1º ao 8º) ou "Pontos corridos — 18 rodadas" (especificação antiga) — e qualquer valor pode ser mudado:
+  formato (rodadas de liga/grupos e de mata-mata; ex.: tabela única), renda, multa, prêmios, limites do elenco, taxa de
+  inscrição, CT e treinamentos. Os valores oficiais ficam num único arquivo do servidor
+  (`backend/app/services/draft_config.py`), que o organizador ajusta.
+- **Elenco:** até 15 Pokémon, até 11 inscritos; escolher o tier sugere o preço (o "BL" vale o tier de baixo + 5 mi).
+- **Como cada gasto é contado:**
+  - **salário** = 5% do preço pago de todos os Pokémon (inscritos e reservas), **por rodada jogada**; quem cai nos
+    grupos não paga as rodadas do mata-mata;
+  - **inscrição**: 6 grátis, depois 100 mil, 200 mil… 500 mil; **cada Pokémon paga uma vez por temporada** (na virada da
+    temporada todos precisam ser inscritos de novo);
+  - **CT**: construção na rodada escolhida (subir de nível paga a diferença); **manutenção em todas as rodadas da
+    temporada**, mesmo depois de eliminado, a partir da rodada seguinte à construção;
+  - **treinamento**: 20% (posição extra) ou 40% (otimização) do preço pago, na rodada em que começa; fica pronto depois
+    de algumas rodadas conforme o tier (ZU 1, PU 2, NU 3…; "BL" conta como o tier de baixo); avisa se passar do número de
+    treinamentos simultâneos do nível do CT;
+  - **W.O. perdido**: multa de 500 mil e nenhuma renda.
+- **Resultados:** modo simples (vitórias com botões + e −, empates, W.O.; derrotas calculadas; a renda é dividida
+  igualmente entre as rodadas jogadas) ou rodada a rodada; até onde o jogador vai no mata-mata e a colocação final
+  (prêmio, que entra na última rodada).
+- **Saídas:** resumo (caixa após as compras, custo, renda + prêmio, saldo, caixa final em verde/vermelho), aviso da
+  rodada em que o caixa fica negativo (transferban), **vitórias para empatar as contas** e a tabela rodada a rodada, com
+  exportação em CSV.
