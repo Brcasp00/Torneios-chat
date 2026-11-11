@@ -139,3 +139,27 @@ async def test_custom_flow_tournament_places_everyone(client):
     e = (await client.get(f"/archive/{(await client.get('/archive')).json()[0]['id']}")).json()
     assert len(e["placements"]) == 8
     assert [(p["position"], p["label"]) for p in e["placements"][4:]] == [(5, "Rodada inicial")] * 4
+
+
+async def test_backfill_puts_previously_finished_tournaments_in_the_archive(client):
+    """Torneios encerrados antes do acervo existir entram nele quando a API inicia (e só uma vez)."""
+    from sqlalchemy import delete
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.db.session import get_session
+    from app.main import app
+    from app.models import ArchiveEntry, ArchivePlacement
+    from app.services import archive
+
+    adm = await admin(client)
+    t, _ = await _knockout_finished(client, adm, n=4)
+    async for s in app.dependency_overrides[get_session]():
+        maker = async_sessionmaker(s.bind, expire_on_commit=False)
+        await s.execute(delete(ArchivePlacement))
+        await s.execute(delete(ArchiveEntry))
+        await s.commit()
+    assert (await client.get("/archive")).json() == []
+    assert await archive.backfill(maker) == 1
+    lst = (await client.get("/archive")).json()
+    assert [e["tournament_id"] for e in lst] == [t["id"]] and lst[0]["champion"]
+    assert await archive.backfill(maker) == 0  # já está no acervo: nada a fazer

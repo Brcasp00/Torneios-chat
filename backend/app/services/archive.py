@@ -105,3 +105,33 @@ def _date(iso: str | None) -> date | None:
         return datetime.fromisoformat(iso).date() if iso else None
     except ValueError:
         return None
+
+
+async def backfill(maker) -> int:
+    """Coloca no acervo os torneios encerrados que ainda não têm entrada (ex.: encerrados antes do acervo existir).
+
+    Roda no início da API; se tudo já estiver no acervo, não faz nada. Falha num torneio não impede os outros.
+    """
+    import logging
+
+    log = logging.getLogger("archive")
+    async with maker() as session:
+        ids = (await session.scalars(
+            select(Tournament.id)
+            .outerjoin(ArchiveEntry, ArchiveEntry.tournament_id == Tournament.id)
+            .where(Tournament.status == "finished", Tournament.parent_id.is_(None), ArchiveEntry.id.is_(None))
+        )).all()
+    done = 0
+    for tid in ids:
+        async with maker() as session:
+            try:
+                t = await session.get(Tournament, tid)
+                if t and await sync_entry(session, t):
+                    await session.commit()
+                    done += 1
+            except Exception:  # noqa: BLE001
+                await session.rollback()
+                log.exception("Falha ao colocar o torneio %s no acervo", tid)
+    if done:
+        log.info("%s torneio(s) encerrado(s) colocados no acervo", done)
+    return done
